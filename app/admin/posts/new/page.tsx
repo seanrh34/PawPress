@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Editor from '@/components/Editor';
 
 export default function NewPost() {
   const router = useRouter();
@@ -134,18 +135,11 @@ export default function NewPost() {
           </div>
 
           {/* Content - Placeholder for QuillJS */}
-          <div>
+          <div className='text-black'>
             <label htmlFor="content" className="block text-sm font-medium text-gray-700 mb-2">
               Content
             </label>
-            <textarea
-              id="content"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={15}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
-              placeholder="Write your post content here... (Rich text editor coming soon)"
-            />
+            <Editor/>
             <p className="mt-1 text-sm text-gray-500">
               Note: Rich text editor will be added in the next step
             </p>
