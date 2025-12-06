@@ -27,8 +27,7 @@ export default function NewPost() {
     setSlug(autoSlug);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     setIsSaving(true);
 
     try {
@@ -83,7 +82,7 @@ export default function NewPost() {
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <h1 className="text-3xl font-bold text-gray-900 mb-8">Create New Post</h1>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-6">
           {/* Title */}
           <div>
             <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
@@ -134,15 +133,12 @@ export default function NewPost() {
             />
           </div>
 
-          {/* Content - Placeholder for QuillJS */}
+          {/* Content - Lexical Rich-text Editor */}
           <div className='text-black'>
             <label htmlFor="content" className="block text-sm font-medium text-gray-700 mb-2">
               Content
             </label>
             <Editor/>
-            <p className="mt-1 text-sm text-gray-500">
-              Note: Rich text editor will be added in the next step
-            </p>
           </div>
 
           {/* Publish Toggle */}
@@ -162,7 +158,8 @@ export default function NewPost() {
           {/* Actions */}
           <div className="flex gap-4 pt-6 border-t border-gray-200">
             <button
-              type="submit"
+              type="button"
+              onClick={handleSubmit}
               disabled={isSaving}
               className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
@@ -175,7 +172,7 @@ export default function NewPost() {
               Cancel
             </Link>
           </div>
-        </form>
+        </div>
       </main>
     </div>
   );
