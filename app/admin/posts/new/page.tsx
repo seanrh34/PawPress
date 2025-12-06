@@ -85,7 +85,7 @@ export default function NewPost() {
         <div className="space-y-6">
           {/* Title */}
           <div>
-            <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="title" className="form-label">
               Title *
             </label>
             <input
@@ -94,14 +94,14 @@ export default function NewPost() {
               value={title}
               onChange={handleTitleChange}
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="form-input"
               placeholder="Enter post title"
             />
           </div>
 
           {/* Slug */}
           <div>
-            <label htmlFor="slug" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="slug" className="form-label">
               Slug *
             </label>
             <input
@@ -110,17 +110,17 @@ export default function NewPost() {
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="form-input"
               placeholder="post-url-slug"
             />
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="form-hint">
               URL: /posts/{slug || 'your-post-slug'}
             </p>
           </div>
 
           {/* Excerpt */}
           <div>
-            <label htmlFor="excerpt" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="excerpt" className="form-label">
               Excerpt
             </label>
             <textarea
@@ -128,14 +128,14 @@ export default function NewPost() {
               value={excerpt}
               onChange={(e) => setExcerpt(e.target.value)}
               rows={3}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="form-textarea"
               placeholder="Brief description of your post"
             />
           </div>
 
           {/* Content - Lexical Rich-text Editor */}
           <div className='text-black'>
-            <label htmlFor="content" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="content" className="form-label">
               Content
             </label>
             <Editor/>
@@ -148,9 +148,9 @@ export default function NewPost() {
               id="isPublished"
               checked={isPublished}
               onChange={(e) => setIsPublished(e.target.checked)}
-              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              className="form-checkbox"
             />
-            <label htmlFor="isPublished" className="text-sm font-medium text-gray-700">
+            <label htmlFor="isPublished" className="form-label mb-0">
               Publish immediately
             </label>
           </div>
@@ -161,13 +161,13 @@ export default function NewPost() {
               type="button"
               onClick={handleSubmit}
               disabled={isSaving}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+              className="btn-primary"
             >
               {isSaving ? 'Saving...' : isPublished ? 'Publish Post' : 'Save as Draft'}
             </button>
             <Link
               href="/admin"
-              className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              className="btn-secondary"
             >
               Cancel
             </Link>

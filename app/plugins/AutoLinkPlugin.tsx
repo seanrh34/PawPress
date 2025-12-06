@@ -1,3 +1,5 @@
+// Currently unused, for future implementation
+
 import { AutoLinkPlugin } from "@lexical/react/LexicalAutoLinkPlugin";
 
 const URL_MATCHER =
