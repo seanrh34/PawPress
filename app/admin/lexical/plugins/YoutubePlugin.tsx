@@ -11,12 +11,18 @@ export default function YoutubePlugin() {
 
   const [editor] = useLexicalComposerContext();
 
-  const onEmbed = () => {
-    if (!url) return;
-    const match =
-      /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/.exec(url);
+  const YOUTUBE_PATTERN = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*$/;
 
-    const id = match && match?.[2]?.length === 11 ? match?.[2] : null;
+  const isValidYouTubeURL = (urlString: string) => {
+    if (!urlString) return false;
+    const match = YOUTUBE_PATTERN.exec(urlString);
+    return match && match[2]?.length === 11;
+  };
+
+  const onEmbed = () => {
+    if (!url || !isValidYouTubeURL(url)) return;
+    const match = YOUTUBE_PATTERN.exec(url);
+    const id = match?.[2] || null;
     if (!id) return;
     editor.update(() => {
       const node = $createYoutubeNode({ id });
@@ -46,8 +52,8 @@ export default function YoutubePlugin() {
           footer={
             <button
               type="button"
-              className="btn-primary"
-              disabled={!url}
+              className={`btn-primary ${(!url || (url && !isValidYouTubeURL(url))) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+              disabled={!url || (url && !isValidYouTubeURL(url))}
               onClick={onEmbed}
             >
               Embed
@@ -55,13 +61,18 @@ export default function YoutubePlugin() {
           }
           isOpen={isOpen}
         >
-          <input
-            type="text"
-            className="form-input"
-            value={url}
-            onChange={(e) => setURL(e.target.value)}
-            placeholder="Add Youtube URL"
-          />
+          <div>
+            <input
+              type="text"
+              className="form-input"
+              value={url}
+              onChange={(e) => setURL(e.target.value)}
+              placeholder="Add Youtube URL"
+            />
+            {url && !isValidYouTubeURL(url) && (
+              <p className="form-hint text-red-600">Please enter a valid YouTube URL</p>
+            )}
+          </div>
         </Modal>
       )}
     </div>

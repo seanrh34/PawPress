@@ -44,7 +44,9 @@ export default function Modal({
           <button
             type="button"
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-gray-400 
+                        hover:text-gray-600 hover:bg-gray-200 
+                        rounded-full p-1 transition-colors cursor-pointer"
             aria-label="Close"
           >
             <X size={24} />

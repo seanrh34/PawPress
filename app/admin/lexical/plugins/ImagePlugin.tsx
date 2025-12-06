@@ -4,14 +4,25 @@ import Modal from "@/components/Modal";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $createImageNode } from "../nodes/ImageNode";
 import { $insertNodes } from "lexical";
+import Toggle from "@/components/Toggle";
 
 export default function ImagePlugin() {
   const [isOpen, setIsOpen] = useState(false);
   const [url, setURL] = useState("");
+  const [altText, setAltText] = useState("");
   const [file, setFile] = useState<File>();
+  const [error, setError] = useState("");
+  const [useUpload, setUseUpload] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [editor] = useLexicalComposerContext();
+
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+  const URL_PATTERN = /^https?:\/\/.+\..+/i;
+
+  const isValidURL = (urlString: string) => {
+    return URL_PATTERN.test(urlString);
+  };
 
   const onAddImage = () => {
     let src = "";
@@ -19,11 +30,13 @@ export default function ImagePlugin() {
     if (file) src = URL.createObjectURL(file);
 
     editor.update(() => {
-      const node = $createImageNode({ src, altText: "Dummy text" });
+      const node = $createImageNode({ src, altText: altText || "Image" });
       $insertNodes([node]);
     });
     setFile(undefined);
     setURL("");
+    setAltText("");
+    setError("");
     if (inputRef.current) {
       inputRef.current.value = "";
     }
@@ -48,9 +61,18 @@ export default function ImagePlugin() {
         accept="image/*"
         style={{ display: "none" }}
         onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) {
-            setFile(file);
+          const selectedFile = e.target.files?.[0];
+          if (selectedFile) {
+            if (selectedFile.size > MAX_FILE_SIZE) {
+              setError(`File size exceeds 10MB. Please choose a smaller image.`);
+              setFile(undefined);
+              if (inputRef.current) {
+                inputRef.current.value = "";
+              }
+            } else {
+              setError("");
+              setFile(selectedFile);
+            }
           }
         }}
       />
@@ -61,8 +83,8 @@ export default function ImagePlugin() {
           footer={
             <button
               type="button"
-              className="btn-primary"
-              disabled={!url && !file}
+              className={`btn-primary ${((!url || (url && !isValidURL(url))) && !file) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+              disabled={(!url || (url && !isValidURL(url))) && !file}
               onClick={onAddImage}
             >
               Add Image
@@ -70,20 +92,63 @@ export default function ImagePlugin() {
           }
           isOpen={isOpen}
         >
-          <input
-            type="text"
-            className="form-input mb-4"
-            value={url}
-            onChange={(e) => setURL(e.target.value)}
-            placeholder="Add Image URL"
-          />
-          <button
-            type="button"
-            className="btn-secondary w-full"
-            onClick={() => inputRef?.current?.click()}
-          >
-            {file ? file.name : "Upload Image"}
-          </button>
+          <div className="space-y-4">
+            <Toggle 
+              leftChoice="Image URL" 
+              rightChoice="Upload File"
+              checked={useUpload}
+              onChange={setUseUpload}
+            />
+
+            {!useUpload ? (
+              <div>
+                <label htmlFor="image-url" className="form-label">
+                  Image URL
+                </label>
+                <input
+                  id="image-url"
+                  type="text"
+                  className="form-input"
+                  value={url}
+                  onChange={(e) => setURL(e.target.value)}
+                  placeholder="https://example.com/image.jpg"
+                />
+                {url && !isValidURL(url) && (
+                  <p className="form-hint text-red-600">Please enter a valid URL (must start with http:// or https://)</p>
+                )}
+              </div>
+            ) : (
+              <div>
+                <label className="form-label">
+                  Upload Image (Max 10MB)
+                </label>
+                <button
+                  type="button"
+                  className="btn-secondary w-full"
+                  onClick={() => inputRef?.current?.click()}
+                >
+                  {file ? file.name : "Choose File"}
+                </button>
+                {error && (
+                  <p className="form-hint text-red-600">{error}</p>
+                )}
+              </div>
+            )}
+
+            <div>
+              <label htmlFor="image-alt" className="form-label">
+                Alt Text (Description)
+              </label>
+              <input
+                id="image-alt"
+                type="text"
+                className="form-input"
+                value={altText}
+                onChange={(e) => setAltText(e.target.value)}
+                placeholder="Describe the image for accessibility"
+              />
+            </div>
+          </div>
         </Modal>
       )}
     </div>
