@@ -5,7 +5,7 @@ import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { AutoFocusPlugin } from "@lexical/react/LexicalAutoFocusPlugin";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
-import ToolbarPlugin from "@/app/plugins/ToolbarPlugin";
+import ToolbarPlugin from "@/app/admin/lexical/plugins/ToolbarPlugin";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import { TableCellNode, TableNode, TableRowNode } from "@lexical/table";
 import { ListItemNode, ListNode } from "@lexical/list";
@@ -16,8 +16,10 @@ import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
 import { TRANSFORMERS } from "@lexical/markdown";
 
-import ListMaxIndentLevelPlugin from "@/app/plugins/ListMaxIndentLevelPlugin";
-import CodeHighlightPlugin from "@/app/plugins/CodeHighlightPlugin";
+import ListMaxIndentLevelPlugin from "@/app/admin/lexical/plugins/ListMaxIndentLevelPlugin";
+import CodeHighlightPlugin from "@/app/admin/lexical/plugins/CodeHighlightPlugin";
+import { ImageNode } from "@/app/admin/lexical/nodes/ImageNode";
+import { YoutubeNode } from "@/app/admin/lexical/nodes/YoutubeNode";
 
 function Placeholder() {
   return <div className="editor-placeholder">Enter some rich text...</div>;
@@ -41,7 +43,9 @@ const editorConfig = {
     TableNode,
     TableCellNode,
     TableRowNode,
-    LinkNode
+    LinkNode,
+    ImageNode,
+    YoutubeNode
   ]
 };
 

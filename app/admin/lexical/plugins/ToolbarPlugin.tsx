@@ -39,6 +39,9 @@ import {
   getDefaultCodeLanguage,
   getCodeLanguages
 } from "@lexical/code";
+import ImagePlugin from "./ImagePlugin";
+import { Youtube } from "react-bootstrap-icons";
+import YoutubePlugin from "./YoutubePlugin";
 
 const LowPriority = 1;
 
@@ -696,7 +699,11 @@ export default function ToolbarPlugin() {
             aria-label="Justify Align"
           >
             <i className="format justify-align" />
-          </button>{" "}
+          </button>
+          <Divider />
+          <ImagePlugin/>
+          <YoutubePlugin/>
+          {" "}
         </>
       )}
     </div>
