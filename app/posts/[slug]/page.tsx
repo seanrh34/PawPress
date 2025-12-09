@@ -1,6 +1,5 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import PostViewer from '@/components/PostViewer';
 import { Post } from '@/lib/types';
 
 async function getPost(slug: string): Promise<Post | null> {
@@ -52,7 +51,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
           </Link>
         </div>
       </header>
-
+      
       {/* Post Content */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <article>
@@ -86,10 +85,11 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
             </div>
           )}
 
-          {/* Post Content - Using Lexical Viewer */}
-          <div className="prose prose-lg max-w-none">
-            <PostViewer content={post.content_lexical} />
-          </div>
+          {/* Post Content - Rendered HTML */}
+          <div 
+            className="prose prose-lg max-w-none"
+            dangerouslySetInnerHTML={{ __html: post.content_html }}
+          />
         </article>
       </main>
     </div>
