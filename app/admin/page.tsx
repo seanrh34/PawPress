@@ -1,6 +1,33 @@
 import Link from 'next/link';
+import { Post } from '@/lib/types';
 
-export default function AdminDashboard() {
+async function getAllPosts(): Promise<Post[]> {
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/posts?order=created_at.desc`, {
+      headers: {
+        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
+      },
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      console.error('Failed to fetch posts');
+      return [];
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching posts:', error);
+    return [];
+  }
+}
+
+export default async function AdminDashboard() {
+  const posts = await getAllPosts();
+  const publishedCount = posts.filter(p => p.published_at).length;
+  const draftCount = posts.filter(p => !p.published_at).length;
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -76,8 +103,8 @@ export default function AdminDashboard() {
                 </svg>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">All Posts</h3>
-                <p className="text-sm text-gray-600">View and manage posts</p>
+                <h3 className="text-lg font-semibold text-gray-900">{posts.length} Total Posts</h3>
+                <p className="text-sm text-gray-600">{publishedCount} published, {draftCount} drafts</p>
               </div>
             </div>
           </div>
@@ -113,10 +140,10 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Recent Posts Section - Placeholder */}
+        {/* Recent Posts Section */}
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">Recent Posts</h2>
+            <h2 className="text-xl font-semibold text-gray-900">All Posts</h2>
             <Link
               href="/admin/posts/new"
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
@@ -125,10 +152,65 @@ export default function AdminDashboard() {
             </Link>
           </div>
           
-          {/* TODO: Replace with actual posts list */}
-          <div className="text-center py-12 text-gray-500">
-            <p>No posts yet. Create your first post to get started!</p>
-          </div>
+          {posts.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {posts.map((post) => (
+                    <tr key={post.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-4">
+                        <div>
+                          <div className="font-medium text-gray-900">{post.title}</div>
+                          <div className="text-sm text-gray-500">/posts/{post.slug}</div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          post.published_at 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {post.published_at ? 'Published' : 'Draft'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-gray-600">
+                        {new Date(post.published_at || post.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex gap-2">
+                          <Link
+                            href={`/posts/${post.slug}`}
+                            className="text-blue-600 hover:text-blue-800 text-sm"
+                          >
+                            View
+                          </Link>
+                          <span className="text-gray-300">|</span>
+                          <Link
+                            href={`/admin/posts/${post.id}/edit`}
+                            className="text-blue-600 hover:text-blue-800 text-sm"
+                          >
+                            Edit
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-500">
+              <p>No posts yet. Create your first post to get started!</p>
+            </div>
+          )}
         </div>
       </main>
     </div>

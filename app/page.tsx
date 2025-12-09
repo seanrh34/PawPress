@@ -1,13 +1,31 @@
 import Link from "next/link";
 import PostCard from "@/components/PostCard";
-import { mockPosts } from "@/lib/mockPosts";
-// TODO: Replace mockPosts with getAllPosts() once Supabase is fully configured
-// import { getAllPosts } from "@/lib/posts";
+import { Post } from "@/lib/types";
 
-export default function Home() {
-  // TODO: Uncomment when ready to use real data
-  // const posts = await getAllPosts();
-  const posts = mockPosts;
+async function getPublishedPosts(): Promise<Post[]> {
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/posts?published_at=not.is.null&order=published_at.desc`, {
+      headers: {
+        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
+      },
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      console.error('Failed to fetch posts');
+      return [];
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching posts:', error);
+    return [];
+  }
+}
+
+export default async function Home() {
+  const posts = await getPublishedPosts();
 
   return (
     <div className="min-h-screen bg-gray-50">
