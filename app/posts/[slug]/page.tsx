@@ -61,10 +61,15 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
               {post.title}
             </h1>
             
-            {post.excerpt && (
-              <p className="text-xl text-gray-600 mb-4">
-                {post.excerpt}
-              </p>
+            {/* Featured Image */}
+            {post.featured_image_url && (
+              <div className="mb-8">
+                <img 
+                  src={post.featured_image_url} 
+                  alt={post.title}
+                  className="w-full rounded-lg"
+                />
+              </div>
             )}
 
             <div className="flex items-center gap-4 text-sm text-gray-500">
@@ -74,20 +79,9 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
             </div>
           </header>
 
-          {/* Featured Image */}
-          {post.featured_image_url && (
-            <div className="mb-8">
-              <img 
-                src={post.featured_image_url} 
-                alt={post.title}
-                className="w-full rounded-lg"
-              />
-            </div>
-          )}
-
           {/* Post Content - Rendered HTML */}
           <div 
-            className="prose prose-lg max-w-none"
+            className="max-w-none text-black"
             dangerouslySetInnerHTML={{ __html: post.content_html }}
           />
         </article>
