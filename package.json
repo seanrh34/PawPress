@@ -21,6 +21,7 @@
     "@lexical/table": "^0.38.2",
     "@lexical/utils": "^0.38.2",
     "@supabase/supabase-js": "^2.86.0",
+    "jsdom": "^27.3.0",
     "lexical": "^0.38.2",
     "next": "^16.0.7",
     "react": "19.2.0",

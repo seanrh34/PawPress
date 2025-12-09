@@ -27,6 +27,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    console.log('Received body:', body);
     const { title, slug, content_lexical, excerpt, featured_image_url, published_at } = body;
 
     console.log('Received content_lexical:', content_lexical);
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
     let content_html = '';
     if (content_lexical) {
       try {
-        content_html = lexicalToHtml(content_lexical);
+        content_html = await lexicalToHtml(content_lexical);
       } catch (error) {
         console.error('Error converting Lexical to HTML:', error);
         // Continue with empty HTML rather than failing the request

@@ -6,43 +6,66 @@ import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { LinkNode } from '@lexical/link';
 import { TableCellNode, TableNode, TableRowNode } from '@lexical/table';
 import { SerializedEditorState } from 'lexical';
-import { ImageNode } from '@/app/admin/lexical/nodes/ImageNode';
-import { YoutubeNode } from '@/app/admin/lexical/nodes/YoutubeNode';
+
+// Global flag to track if jsdom has been initialized
+let isJsdomInitialized = false;
+
+/**
+ * Initialize jsdom for server-side DOM
+ */
+async function initializeJsdom() {
+  if (isJsdomInitialized) return;
+  
+  const { JSDOM } = await import('jsdom');
+  const dom = new JSDOM();
+  (global as any).document = dom.window.document;
+  (global as any).window = dom.window;
+  isJsdomInitialized = true;
+}
 
 /**
  * Convert Lexical SerializedEditorState to HTML string
  * This is used server-side to generate SEO-friendly HTML content
  */
-export function lexicalToHtml(editorState: SerializedEditorState): string {
-  // Create a headless editor (no DOM required)
-  const editor = createHeadlessEditor({
-    nodes: [
-      HeadingNode,
-      ListNode,
-      ListItemNode,
-      QuoteNode,
-      CodeNode,
-      CodeHighlightNode,
-      TableNode,
-      TableCellNode,
-      TableRowNode,
-      LinkNode,
-      ImageNode,
-      YoutubeNode,
-    ],
-    onError: (error: Error) => {
-      console.error('Lexical error during HTML conversion:', error);
-      throw error;
-    },
-  });
+export async function lexicalToHtml(editorState: SerializedEditorState): Promise<string> {
+  try {
+    // Initialize jsdom if not already done
+    await initializeJsdom();
+    
+    // Create a headless editor (no DOM required)
+    const editor = createHeadlessEditor({
+      namespace: 'HeadlessEditor',
+      nodes: [
+        HeadingNode,
+        ListNode,
+        ListItemNode,
+        QuoteNode,
+        CodeNode,
+        CodeHighlightNode,
+        TableNode,
+        TableCellNode,
+        TableRowNode,
+        LinkNode,
+        // Note: Custom nodes like ImageNode and YoutubeNode excluded - they may have client-side dependencies
+      ],
+      onError: (error: Error) => {
+        console.error('Lexical error during HTML conversion:', error);
+        throw error;
+      },
+    });
 
-  let html = '';
+    let html = '';
 
-  // Parse the editor state and generate HTML
-  editor.setEditorState(editor.parseEditorState(editorState));
-  editor.getEditorState().read(() => {
-    html = $generateHtmlFromNodes(editor);
-  });
+    // Parse the editor state and generate HTML
+    editor.setEditorState(editor.parseEditorState(editorState));
+    editor.getEditorState().read(() => {
+      html = $generateHtmlFromNodes(editor);
+    });
 
-  return html;
+    return html;
+  } catch (error) {
+    console.error('Failed to convert Lexical to HTML:', error);
+    console.error('Editor state:', JSON.stringify(editorState, null, 2));
+    throw error;
+  }
 }

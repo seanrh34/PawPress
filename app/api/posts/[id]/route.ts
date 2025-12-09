@@ -5,13 +5,15 @@ import { lexicalToHtml } from '@/lib/lexicalToHtml';
 // GET single post by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+    console.log("Fetching post ID: " + id);
     const { data, error } = await supabase
       .from('posts')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (error) {
@@ -30,9 +32,11 @@ export async function GET(
 // PUT update post
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+    console.log("Updating post ID: " + id);
     const body = await request.json();
     const { title, slug, content_lexical, excerpt, featured_image_url, published_at } = body;
 
@@ -40,7 +44,7 @@ export async function PUT(
     let content_html = '';
     if (content_lexical) {
       try {
-        content_html = lexicalToHtml(content_lexical);
+        content_html = await lexicalToHtml(content_lexical);
       } catch (error) {
         console.error('Error converting Lexical to HTML:', error);
         // Continue with empty HTML rather than failing the request
@@ -59,7 +63,7 @@ export async function PUT(
         published_at,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single();
 
@@ -85,13 +89,15 @@ export async function PUT(
 // DELETE post
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+    console.log("Deleting post ID: " + id);
     const { error } = await supabase
       .from('posts')
       .delete()
-      .eq('id', params.id);
+      .eq('id', id);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
