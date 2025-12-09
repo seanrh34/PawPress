@@ -5,6 +5,7 @@ import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { AutoFocusPlugin } from "@lexical/react/LexicalAutoFocusPlugin";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
+import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import ToolbarPlugin from "@/app/admin/lexical/plugins/ToolbarPlugin";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import { TableCellNode, TableNode, TableRowNode } from "@lexical/table";
@@ -15,11 +16,18 @@ import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
 import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
 import { TRANSFORMERS } from "@lexical/markdown";
+import { EditorState } from "lexical";
 
 import ListMaxIndentLevelPlugin from "@/app/admin/lexical/plugins/ListMaxIndentLevelPlugin";
 import CodeHighlightPlugin from "@/app/admin/lexical/plugins/CodeHighlightPlugin";
 import { ImageNode } from "@/app/admin/lexical/nodes/ImageNode";
 import { YoutubeNode } from "@/app/admin/lexical/nodes/YoutubeNode";
+
+interface EditorProps {
+  onChange?: (editorState: SerializedEditorState) => void;
+}
+
+type SerializedEditorState = ReturnType<EditorState['toJSON']>;
 
 function Placeholder() {
   return <div className="editor-placeholder">Enter some rich text...</div>;
@@ -49,7 +57,14 @@ const editorConfig = {
   ]
 };
 
-export default function Editor() {
+export default function Editor({ onChange }: EditorProps) {
+  const handleChange = (editorState: EditorState) => {
+    if (onChange) {
+      const json = editorState.toJSON();
+      onChange(json);
+    }
+  };
+
   return (
     <LexicalComposer initialConfig={editorConfig}>
       <div className="editor-container">
@@ -67,6 +82,7 @@ export default function Editor() {
           <LinkPlugin />
           <ListMaxIndentLevelPlugin maxDepth={7} />
           <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
+          <OnChangePlugin onChange={handleChange} />
         </div>
       </div>
     </LexicalComposer>

@@ -4,13 +4,14 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Editor from '@/components/Editor';
+import { SerializedEditorState } from 'lexical';
 
 export default function NewPost() {
   const router = useRouter();
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [excerpt, setExcerpt] = useState('');
-  const [content, setContent] = useState('');
+  const [content, setContent] = useState<SerializedEditorState | null>(null);
   const [isPublished, setIsPublished] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -28,6 +29,17 @@ export default function NewPost() {
   };
 
   const handleSubmit = async () => {
+    // Validate required fields
+    if (!title || !slug) {
+      alert('Title and slug are required');
+      return;
+    }
+
+    if (!content) {
+      alert('Please add some content to your post');
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -40,7 +52,7 @@ export default function NewPost() {
           title,
           slug,
           excerpt,
-          content_html: content,
+          content_lexical: content,
           published_at: isPublished ? new Date().toISOString() : null,
         }),
       });
@@ -138,7 +150,7 @@ export default function NewPost() {
             <label htmlFor="content" className="form-label">
               Content
             </label>
-            <Editor/>
+            <Editor onChange={setContent} />
           </div>
 
           {/* Publish Toggle */}

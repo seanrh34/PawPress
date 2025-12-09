@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { lexicalToHtml } from '@/lib/lexicalToHtml';
 
 // GET all posts
 export async function GET() {
@@ -26,7 +27,10 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, slug, content_html, excerpt, featured_image_url, published_at } = body;
+    const { title, slug, content_lexical, excerpt, featured_image_url, published_at } = body;
+
+    console.log('Received content_lexical:', content_lexical);
+    console.log('Type:', typeof content_lexical);
 
     // Validate required fields
     if (!title || !slug) {
@@ -36,13 +40,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Generate HTML from Lexical JSON
+    let content_html = '';
+    if (content_lexical) {
+      try {
+        content_html = lexicalToHtml(content_lexical);
+      } catch (error) {
+        console.error('Error converting Lexical to HTML:', error);
+        // Continue with empty HTML rather than failing the request
+      }
+    }
+
     const { data, error } = await supabase
       .from('posts')
       .insert([
         {
           title,
           slug,
-          content_html: content_html || '',
+          content_lexical: content_lexical || null,
+          content_html,
           excerpt: excerpt || '',
           featured_image_url: featured_image_url || null,
           published_at: published_at || null,
