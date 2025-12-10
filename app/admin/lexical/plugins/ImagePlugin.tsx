@@ -26,13 +26,40 @@ export default function ImagePlugin() {
 
   const onAddImage = () => {
     let src = "";
-    if (url) src = url;
-    if (file) src = URL.createObjectURL(file);
+    if (url) {
+      src = url;
+    } else if (file) {
+      // Convert file to base64 for transmission to server
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        editor.update(() => {
+          const node = $createImageNode({ src: base64String, altText: altText || "Image" });
+          $insertNodes([node]);
+        });
+      };
+      reader.readAsDataURL(file);
+      
+      // Clear form and close modal
+      setFile(undefined);
+      setURL("");
+      setAltText("");
+      setError("");
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
+      setIsOpen(false);
+      return; // Exit early since we're handling async
+    }
 
-    editor.update(() => {
-      const node = $createImageNode({ src, altText: altText || "Image" });
-      $insertNodes([node]);
-    });
+    // Handle URL case (synchronous)
+    if (src) {
+      editor.update(() => {
+        const node = $createImageNode({ src, altText: altText || "Image" });
+        $insertNodes([node]);
+      });
+    }
+    
     setFile(undefined);
     setURL("");
     setAltText("");

@@ -62,10 +62,10 @@ export async function lexicalToHtml(editorState: SerializedEditorState): Promise
       html = $generateHtmlFromNodes(editor);
     });
 
+    console.log(html);
     return html;
   } catch (error) {
     console.error('Failed to convert Lexical to HTML:', error);
-    console.error('Editor state:', JSON.stringify(editorState, null, 2));
     throw error;
   }
 }

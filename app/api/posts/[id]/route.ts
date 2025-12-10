@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { lexicalToHtml } from '@/lib/lexicalToHtml';
+import { processAndUploadImages } from '@/lib/uploadImages';
 
 // GET single post by ID
 export async function GET(
@@ -9,7 +10,6 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    console.log("Fetching post ID: " + id);
     const { data, error } = await supabase
       .from('posts')
       .select('*')
@@ -36,9 +36,19 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    console.log("Updating post ID: " + id);
     const body = await request.json();
-    const { title, slug, content_lexical, excerpt, featured_image_url, published_at } = body;
+    let { title, slug, content_lexical, excerpt, featured_image_url, published_at } = body;
+
+    // Process blob images: upload to Supabase and replace with permanent URLs
+    if (content_lexical) {
+      try {
+        content_lexical = await processAndUploadImages(content_lexical);
+        console.log('Images processed successfully');
+      } catch (error) {
+        console.error('Error processing images:', error);
+        // Continue anyway - images might just not upload
+      }
+    }
 
     // Generate HTML from Lexical JSON
     let content_html = '';
@@ -93,7 +103,6 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    console.log("Deleting post ID: " + id);
     const { error } = await supabase
       .from('posts')
       .delete()

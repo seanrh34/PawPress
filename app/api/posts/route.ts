@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { lexicalToHtml } from '@/lib/lexicalToHtml';
+import { processAndUploadImages } from '@/lib/uploadImages';
 
 // GET all posts
 export async function GET() {
@@ -27,11 +28,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    console.log('Received body:', body);
-    const { title, slug, content_lexical, excerpt, featured_image_url, published_at } = body;
-
-    console.log('Received content_lexical:', content_lexical);
-    console.log('Type:', typeof content_lexical);
+    let { title, slug, content_lexical, excerpt, featured_image_url, published_at } = body;
 
     // Validate required fields
     if (!title || !slug) {
@@ -39,6 +36,18 @@ export async function POST(request: NextRequest) {
         { error: 'Title and slug are required' },
         { status: 400 }
       );
+    }
+
+    // Process base64 images: upload to Supabase and replace with permanent URLs
+    if (content_lexical) {
+      try {
+        console.log("content_lexical:", content_lexical);
+        console.log("content_lexical.root.children:", content_lexical.root.children);
+        content_lexical = await processAndUploadImages(content_lexical);
+      } catch (error) {
+        console.error('Error processing images:', error);
+        // Continue anyway - images might just not upload
+      }
     }
 
     // Generate HTML from Lexical JSON
