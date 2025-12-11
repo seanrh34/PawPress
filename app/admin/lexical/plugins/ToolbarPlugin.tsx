@@ -51,6 +51,7 @@ const supportedBlockTypes = new Set([
   "code",
   "h1",
   "h2",
+  "h3",
   "ul",
   "ol"
 ]);
@@ -58,8 +59,8 @@ const supportedBlockTypes = new Set([
 const blockTypeToBlockName = {
   code: "Code Block",
   h1: "Large Heading",
-  h2: "Small Heading",
-  h3: "Heading",
+  h2: "Medium Heading",
+  h3: "Small Heading",
   h4: "Heading",
   h5: "Heading",
   ol: "Numbered List",
@@ -308,7 +309,7 @@ function BlockOptionsDropdownList({
     setShowBlockOptionsDropDown(false);
   };
 
-  const formatLargeHeading = () => {
+  const formatHeading1 = () => {
     if (blockType !== "h1") {
       editor.update(() => {
         const selection = $getSelection();
@@ -321,13 +322,26 @@ function BlockOptionsDropdownList({
     setShowBlockOptionsDropDown(false);
   };
 
-  const formatSmallHeading = () => {
+  const formatHeading2 = () => {
     if (blockType !== "h2") {
       editor.update(() => {
         const selection = $getSelection();
 
         if ($isRangeSelection(selection)) {
           $wrapNodes(selection, () => $createHeadingNode("h2"));
+        }
+      });
+    }
+    setShowBlockOptionsDropDown(false);
+  };
+
+  const formatHeading3 = () => {
+    if (blockType !== "h3") {
+      editor.update(() => {
+        const selection = $getSelection();
+
+        if ($isRangeSelection(selection)) {
+          $wrapNodes(selection, () => $createHeadingNode("h3"));
         }
       });
     }
@@ -385,15 +399,20 @@ function BlockOptionsDropdownList({
         <span className="text">Normal</span>
         {blockType === "paragraph" && <span className="active" />}
       </button>
-      <button className="item" onClick={formatLargeHeading}>
+      <button className="item" onClick={formatHeading1}>
         <span className="icon large-heading" />
         <span className="text">Large Heading</span>
         {blockType === "h1" && <span className="active" />}
       </button>
-      <button className="item" onClick={formatSmallHeading}>
+      <button className="item" onClick={formatHeading2}>
         <span className="icon small-heading" />
-        <span className="text">Small Heading</span>
+        <span className="text">Medium Heading</span>
         {blockType === "h2" && <span className="active" />}
+      </button>
+      <button className="item" onClick={formatHeading3}>
+        <span className="icon heading3" />
+        <span className="text">Small Heading</span>
+        {blockType === "h3" && <span className="active" />}
       </button>
       <button className="item" onClick={formatBulletList}>
         <span className="icon bullet-list" />

@@ -749,6 +749,11 @@ i.redo {
   background-image: url(/icons/type-h2.svg);
 }
 
+.icon.heading3,
+.icon.h3 {
+  background-image: url(/icons/type-h3.svg);
+}
+
 .icon.bullet-list,
 .icon.ul {
   background-image: url(/icons/list-ul.svg);
