@@ -154,6 +154,11 @@ export async function processAndUploadImages(editorState: SerializedEditorState)
       return editorState;
     }
     
+    // Get Supabase storage URL to detect already-uploaded images
+    const supabaseStorageUrl = process.env.NEXT_PUBLIC_SUPABASE_URL 
+      ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/post-images/`
+      : '';
+    
     // Upload all images and create URL mapping
     const urlMap = new Map<string, string>();
     
@@ -167,13 +172,17 @@ export async function processAndUploadImages(editorState: SerializedEditorState)
           const contentTypeMatch = imageUrl.match(/data:(image\/[a-z]+);/);
           const contentType = contentTypeMatch ? contentTypeMatch[1] : 'image/jpeg';
           permanentUrl = await uploadBase64ToSupabase(imageUrl, contentType);
+        } else if (supabaseStorageUrl && imageUrl.startsWith(supabaseStorageUrl)) {
+          // Already uploaded to our Supabase Storage - skip
+          console.log('Skipping already uploaded Supabase image:', imageUrl);
+          continue;
         } else if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
           // External URL - download and re-upload
           console.log('Downloading and uploading external image:', imageUrl);
           permanentUrl = await downloadAndUploadToSupabase(imageUrl);
         } else {
-          // Already a Supabase URL or other valid URL - skip
-          console.log('Skipping already processed URL:', imageUrl);
+          // Unknown URL format - skip
+          console.log('Skipping unknown URL format:', imageUrl);
           continue;
         }
         
