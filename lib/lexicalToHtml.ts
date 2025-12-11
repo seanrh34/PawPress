@@ -6,6 +6,7 @@ import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { LinkNode } from '@lexical/link';
 import { TableCellNode, TableNode, TableRowNode } from '@lexical/table';
 import { SerializedEditorState } from 'lexical';
+import { ImageNode } from '@/app/admin/lexical/nodes/ImageNode';
 
 // Global flag to track if jsdom has been initialized
 let isJsdomInitialized = false;
@@ -32,7 +33,7 @@ export async function lexicalToHtml(editorState: SerializedEditorState): Promise
     // Initialize jsdom if not already done
     await initializeJsdom();
     
-    // Create a headless editor (no DOM required)
+    // Create a headless editor
     const editor = createHeadlessEditor({
       namespace: 'HeadlessEditor',
       nodes: [
@@ -46,7 +47,8 @@ export async function lexicalToHtml(editorState: SerializedEditorState): Promise
         TableCellNode,
         TableRowNode,
         LinkNode,
-        // Note: Custom nodes like ImageNode and YoutubeNode excluded - they may have client-side dependencies
+        ImageNode,
+        // Note: YoutubeNode excluded for now
       ],
       onError: (error: Error) => {
         console.error('Lexical error during HTML conversion:', error);
