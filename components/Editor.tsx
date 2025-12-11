@@ -16,7 +16,9 @@ import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
 import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
 import { TRANSFORMERS } from "@lexical/markdown";
-import { EditorState } from "lexical";
+import { EditorState, SerializedEditorState } from "lexical";
+import { useEffect } from "react";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 
 import ListMaxIndentLevelPlugin from "@/app/admin/lexical/plugins/ListMaxIndentLevelPlugin";
 import CodeHighlightPlugin from "@/app/admin/lexical/plugins/CodeHighlightPlugin";
@@ -25,15 +27,29 @@ import { YoutubeNode } from "@/app/admin/lexical/nodes/YoutubeNode";
 
 interface EditorProps {
   onChange?: (editorState: SerializedEditorState) => void;
+  initialState?: SerializedEditorState | null;
 }
 
-type SerializedEditorState = ReturnType<EditorState['toJSON']>;
+// Plugin to set initial editor state
+function InitialStatePlugin({ initialState }: { initialState: SerializedEditorState | null }) {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    if (initialState) {
+      const editorState = editor.parseEditorState(initialState);
+      editor.setEditorState(editorState);
+    }
+  }, []); // Only run once on mount
+
+  return null;
+}
 
 function Placeholder() {
   return <div className="editor-placeholder">Enter some rich text...</div>;
 }
 
 const editorConfig = {
+  namespace: 'PostEditor',
   // The editor theme
   theme: editorTheme,
   // Handling of errors during update
@@ -57,7 +73,7 @@ const editorConfig = {
   ]
 };
 
-export default function Editor({ onChange }: EditorProps) {
+export default function Editor({ onChange, initialState }: EditorProps) {
   const handleChange = (editorState: EditorState) => {
     if (onChange) {
       const json = editorState.toJSON();
@@ -83,6 +99,7 @@ export default function Editor({ onChange }: EditorProps) {
           <ListMaxIndentLevelPlugin maxDepth={7} />
           <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
           <OnChangePlugin onChange={handleChange} />
+          {initialState && <InitialStatePlugin initialState={initialState} />}
         </div>
       </div>
     </LexicalComposer>

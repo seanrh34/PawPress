@@ -216,7 +216,7 @@ export default function AdminDashboard() {
                         {new Date(post.published_at || post.created_at).toLocaleDateString()}
                       </td>
                       <td className="px-4 py-4">
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 items-center">
                           <Link
                             href={`/posts/${post.slug}`}
                             className="text-blue-600 hover:text-blue-800 text-sm"
