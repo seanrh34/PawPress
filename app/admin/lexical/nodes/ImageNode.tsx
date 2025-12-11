@@ -122,6 +122,8 @@ export class ImageNode extends DecoratorNode<React.JSX.Element> {
             width: this.__width,
             height: this.__height,
             maxWidth: this.__maxWidth,
+            display: 'block',
+            margin: '1.5rem 0',
             }}
         />
         );
