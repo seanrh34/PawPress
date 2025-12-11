@@ -1,30 +1,57 @@
+'use client';
+
 import Link from 'next/link';
 import { Post } from '@/lib/types';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
-async function getAllPosts(): Promise<Post[]> {
-  try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/posts?order=created_at.desc`, {
-      headers: {
-        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
-      },
-      cache: 'no-store',
-    });
+export default function AdminDashboard() {
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
-    if (!response.ok) {
-      console.error('Failed to fetch posts');
-      return [];
+  useEffect(() => {
+    fetchPosts();
+  }, []);
+
+  const fetchPosts = async () => {
+    try {
+      const response = await fetch('/api/posts');
+      if (!response.ok) {
+        throw new Error('Failed to fetch posts');
+      }
+      const data = await response.json();
+      setPosts(data);
+    } catch (error) {
+      console.error('Error fetching posts:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string, title: string) => {
+    if (!confirm(`Are you sure you want to delete "${title}"? This action cannot be undone.`)) {
+      return;
     }
 
-    return response.json();
-  } catch (error) {
-    console.error('Error fetching posts:', error);
-    return [];
-  }
-}
+    try {
+      const response = await fetch(`/api/posts/${id}`, {
+        method: 'DELETE',
+      });
 
-export default async function AdminDashboard() {
-  const posts = await getAllPosts();
+      if (!response.ok) {
+        throw new Error('Failed to delete post');
+      }
+
+      // Remove post from local state
+      setPosts(posts.filter(post => post.id !== id));
+      alert('Post deleted successfully');
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      alert('Failed to delete post. Please try again.');
+    }
+  };
+
   const publishedCount = posts.filter(p => p.published_at).length;
   const draftCount = posts.filter(p => !p.published_at).length;
 
@@ -152,7 +179,11 @@ export default async function AdminDashboard() {
             </Link>
           </div>
           
-          {posts.length > 0 ? (
+          {isLoading ? (
+            <div className="text-center py-12 text-gray-500">
+              <p>Loading posts...</p>
+            </div>
+          ) : posts.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
@@ -199,6 +230,13 @@ export default async function AdminDashboard() {
                           >
                             Edit
                           </Link>
+                          <span className="text-gray-300">|</span>
+                          <button
+                            onClick={() => handleDelete(post.id, post.title)}
+                            className="text-red-600 hover:text-red-800 text-sm"
+                          >
+                            Delete
+                          </button>
                         </div>
                       </td>
                     </tr>
