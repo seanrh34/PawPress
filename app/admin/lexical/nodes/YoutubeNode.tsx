@@ -70,7 +70,16 @@ export class YoutubeNode extends DecoratorNode<React.JSX.Element> {
 
     decorate(): React.JSX.Element {
         return (
-        <iframe height={HEIGHT} width={WIDTH} src={getYoutubeLink(this.__id)} />
+        <iframe 
+            height={HEIGHT} 
+            width={WIDTH} 
+            src={getYoutubeLink(this.__id)}
+            style={{
+                display: 'block',
+                margin: '1.5rem 0',
+                maxWidth: '100%',
+            }}
+        />
         );
     }
 
@@ -89,6 +98,7 @@ export class YoutubeNode extends DecoratorNode<React.JSX.Element> {
         iframe.setAttribute("height", HEIGHT);
         iframe.setAttribute("width", WIDTH);
         iframe.setAttribute("src", getYoutubeLink(this.__id));
+        iframe.setAttribute("style", "border-radius: 0.5rem; max-width: 100%;");
 
         return { element: iframe };
     }

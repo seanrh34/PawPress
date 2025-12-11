@@ -126,6 +126,12 @@ body {
     @apply my-6 max-w-full h-auto;
   }
 
+  .post-content iframe {
+    display: block;
+    margin: 1.5rem 0;
+    max-width: 100%;
+  }
+
   .post-content ul {
     @apply list-disc list-inside mb-4 space-y-2 text-gray-700;
   }

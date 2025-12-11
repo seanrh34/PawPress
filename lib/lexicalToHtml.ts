@@ -7,6 +7,7 @@ import { LinkNode } from '@lexical/link';
 import { TableCellNode, TableNode, TableRowNode } from '@lexical/table';
 import { SerializedEditorState } from 'lexical';
 import { ImageNode } from '@/app/admin/lexical/nodes/ImageNode';
+import { YoutubeNode } from '@/app/admin/lexical/nodes/YoutubeNode';
 
 // Global flag to track if jsdom has been initialized
 let isJsdomInitialized = false;
@@ -48,7 +49,7 @@ export async function lexicalToHtml(editorState: SerializedEditorState): Promise
         TableRowNode,
         LinkNode,
         ImageNode,
-        // Note: YoutubeNode excluded for now
+        YoutubeNode
       ],
       onError: (error: Error) => {
         console.error('Lexical error during HTML conversion:', error);

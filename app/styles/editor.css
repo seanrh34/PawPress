@@ -215,6 +215,12 @@ body {
   margin-bottom: 0;
 }
 
+.editor-paragraph iframe {
+  display: block;
+  margin: 1.5rem 0;
+  max-width: 100%;
+}
+
 .editor-heading-h1 {
   font-size: 2.25rem; /* 36px - 4xl */
   color: #111827; /* gray-900 */
