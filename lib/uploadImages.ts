@@ -45,6 +45,58 @@ async function uploadBase64ToSupabase(base64Data: string, contentType: string): 
 }
 
 /**
+ * Download an external image URL and upload to Supabase Storage
+ * @param imageUrl - The external image URL to download
+ * @returns The public URL from Supabase Storage
+ */
+async function downloadAndUploadToSupabase(imageUrl: string): Promise<string> {
+  try {
+    // Fetch the image from the external URL
+    const response = await fetch(imageUrl);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.statusText}`);
+    }
+    
+    // Get content type from response headers
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    
+    // Convert response to buffer
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    // Generate unique filename
+    const timestamp = Date.now();
+    const randomStr = Math.random().toString(36).substring(2, 15);
+    const extension = contentType.split('/')[1] || 'jpg';
+    const fileName = `${timestamp}-${randomStr}.${extension}`;
+    
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('post-images')
+      .upload(fileName, buffer, {
+        contentType,
+        cacheControl: '3600',
+        upsert: false
+      });
+    
+    if (error) {
+      throw error;
+    }
+    
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('post-images')
+      .getPublicUrl(data.path);
+    
+    return publicUrl;
+  } catch (error) {
+    console.error('Failed to download and upload image:', error);
+    throw error;
+  }
+}
+
+/**
  * Recursively find all image nodes in the Lexical editor state
  */
 function findImageNodes(node: any): string[] {
@@ -86,44 +138,54 @@ function replaceImageUrls(node: any, urlMap: Map<string, string>): any {
 }
 
 /**
- * Process Lexical editor state: upload base64 images and replace with permanent URLs
- * Note: Images should be converted to base64 format client-side before sending to API
- * Format: { src: "data:image/jpeg;base64,..." }
+ * Process Lexical editor state: upload base64 images and download/re-upload external URLs
+ * Note: All images (base64 and external URLs) will be uploaded to Supabase Storage
  * @param editorState - The Lexical SerializedEditorState
- * @returns Updated editor state with permanent image URLs
+ * @returns Updated editor state with permanent image URLs from Supabase
  */
 export async function processAndUploadImages(editorState: SerializedEditorState): Promise<SerializedEditorState> {
   try {
     // Find all image URLs in the editor state
     const imageUrls = findImageNodes(editorState.root);
     console.log('Image URLs to process:', imageUrls);
-    // Filter only base64 data URLs
-    const base64Images = imageUrls.filter(url => url.startsWith('data:image/'));
-    console.log('Base64 images to upload:', base64Images);
-    if (base64Images.length === 0) {
-      console.log('No base64 images found, skipping upload.');
+    
+    if (imageUrls.length === 0) {
+      console.log('No images found, skipping upload.');
       return editorState;
     }
     
-    // Upload all base64 images and create URL mapping
+    // Upload all images and create URL mapping
     const urlMap = new Map<string, string>();
     
-    for (const base64Url of base64Images) {
-      console.log('Uploading image:', base64Url.substring(0, 30) + '...'); // Log beginning of base64 string
+    for (const imageUrl of imageUrls) {
       try {
-        // Extract content type from data URL
-        const contentTypeMatch = base64Url.match(/data:(image\/[a-z]+);/);
-        const contentType = contentTypeMatch ? contentTypeMatch[1] : 'image/jpeg';
+        let permanentUrl: string;
         
-        const permanentUrl = await uploadBase64ToSupabase(base64Url, contentType);
-        urlMap.set(base64Url, permanentUrl);
+        if (imageUrl.startsWith('data:image/')) {
+          // Base64 image - extract content type and upload
+          console.log('Uploading base64 image:', imageUrl.substring(0, 30) + '...');
+          const contentTypeMatch = imageUrl.match(/data:(image\/[a-z]+);/);
+          const contentType = contentTypeMatch ? contentTypeMatch[1] : 'image/jpeg';
+          permanentUrl = await uploadBase64ToSupabase(imageUrl, contentType);
+        } else if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+          // External URL - download and re-upload
+          console.log('Downloading and uploading external image:', imageUrl);
+          permanentUrl = await downloadAndUploadToSupabase(imageUrl);
+        } else {
+          // Already a Supabase URL or other valid URL - skip
+          console.log('Skipping already processed URL:', imageUrl);
+          continue;
+        }
+        
+        urlMap.set(imageUrl, permanentUrl);
+        console.log('Successfully uploaded:', permanentUrl);
       } catch (error) {
         console.error('Failed to upload image:', error);
-        // Keep the base64 URL if upload fails
+        // Keep the original URL if upload fails
       }
     }
     
-    // Replace base64 URLs with permanent URLs in the editor state
+    // Replace original URLs with permanent Supabase URLs in the editor state
     const updatedEditorState = {
       ...editorState,
       root: replaceImageUrls(editorState.root, urlMap)
