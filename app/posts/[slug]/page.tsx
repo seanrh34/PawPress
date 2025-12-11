@@ -80,7 +80,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
 
           {/* Post Content - Rendered HTML */}
           <div 
-            className="max-w-none text-black"
+            className="post-content"
             dangerouslySetInnerHTML={{ __html: post.content_html }}
           />
         </article>
