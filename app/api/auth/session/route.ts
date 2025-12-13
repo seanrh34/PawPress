@@ -17,6 +17,7 @@ export async function GET() {
         id: session.user.id,
         email: session.user.email,
         role: profile?.role || null,
+        display_name: session.user.user_metadata?.display_name || null,
       },
     });
   } catch (error) {
