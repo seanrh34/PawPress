@@ -36,8 +36,8 @@ export async function DELETE(
       );
     }
 
-    // Delete user from auth (this will cadminCliento user_profiles due to foreign key)
-    const { error: deleteError } = await supabase.auth.admin.deleteUser(id);
+    // Delete user from auth (this will cascade to user_profiles due to foreign key)
+    const { error: deleteError } = await adminClient.auth.admin.deleteUser(id);
 
     if (deleteError) {
       console.error('Error deleting user:', deleteError);
