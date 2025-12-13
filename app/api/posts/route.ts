@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { lexicalToHtml } from '@/lib/lexicalToHtml';
 import { processAndUploadImages } from '@/lib/uploadImages';
+import { getSession } from '@/lib/auth';
 
 // GET all posts
 export async function GET() {
@@ -26,6 +27,15 @@ export async function GET() {
 
 // POST create new post
 export async function POST(request: NextRequest) {
+  // Check authentication
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401 }
+    );
+  }
+
   try {
     const body = await request.json();
     let { title, slug, content_lexical, excerpt, featured_image_url, published_at } = body;
