@@ -20,10 +20,11 @@
     "@lexical/selection": "^0.38.2",
     "@lexical/table": "^0.38.2",
     "@lexical/utils": "^0.38.2",
+    "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.86.0",
     "jsdom": "^27.3.0",
     "lexical": "^0.38.2",
-    "next": "^16.0.7",
+    "next": "^16.0.10",
     "react": "19.2.0",
     "react-bootstrap-icons": "^1.11.6",
     "react-dom": "19.2.0"
