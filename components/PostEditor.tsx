@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Editor from '@/components/Editor';
+import FeaturedImageUpload from '@/components/FeaturedImageUpload';
 import { SerializedEditorState } from 'lexical';
 import { Post } from '@/lib/types';
+import { supabase } from '@/lib/supabase';
 
 interface PostEditorProps {
   post?: Post;
@@ -20,6 +22,8 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
   const [content, setContent] = useState<SerializedEditorState | null>(post?.content_lexical || null);
   const [isPublished, setIsPublished] = useState(!!post?.published_at);
   const [isSaving, setIsSaving] = useState(false);
+  const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(post?.featured_image_url || null);
+  const [featuredImageFile, setFeaturedImageFile] = useState<File>();
 
   // Auto-generate slug from title (only in create mode)
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -36,6 +40,68 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
     }
   };
 
+  const uploadFeaturedImage = async (): Promise<string | null> => {
+    if (!featuredImageFile && !featuredImageUrl) {
+      return null;
+    }
+
+    // If it's a URL (no file), return the URL as-is
+    if (featuredImageUrl && !featuredImageFile) {
+      return featuredImageUrl;
+    }
+
+    // If it's a file, upload to Supabase
+    if (featuredImageFile) {
+      try {
+        const timestamp = Date.now();
+        const randomStr = Math.random().toString(36).substring(2, 15);
+        const extension = featuredImageFile.name.split('.').pop() || 'jpg';
+        const fileName = `featured-${timestamp}-${randomStr}.${extension}`;
+
+        const { data, error } = await supabase.storage
+          .from('post-images')
+          .upload(fileName, featuredImageFile, {
+            contentType: featuredImageFile.type,
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('post-images')
+          .getPublicUrl(data.path);
+
+        return publicUrl;
+      } catch (error) {
+        console.error('Failed to upload featured image:', error);
+        throw new Error('Failed to upload featured image');
+      }
+    }
+
+    return null;
+  };
+
+  const deleteOldFeaturedImage = async (oldUrl: string | null) => {
+    if (!oldUrl) return;
+
+    try {
+      // Extract filename from URL
+      const urlParts = oldUrl.split('/');
+      const fileName = urlParts[urlParts.length - 1];
+
+      // Only delete if it's from our storage (contains 'post-images')
+      if (oldUrl.includes('post-images')) {
+        await supabase.storage
+          .from('post-images')
+          .remove([fileName]);
+      }
+    } catch (error) {
+      console.error('Failed to delete old featured image:', error);
+      // Don't throw - we can continue even if delete fails
+    }
+  };
+
   const handleSubmit = async () => {
     // Validate required fields
     if (!title || !slug) {
@@ -48,9 +114,27 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
       return;
     }
 
+    if (!featuredImageUrl && !featuredImageFile) {
+      alert('Please add a featured image');
+      return;
+    }
+
     setIsSaving(true);
 
     try {
+      let newFeaturedImageUrl = featuredImageUrl;
+
+      // If there's a new image to upload
+      if (featuredImageFile || (featuredImageUrl !== post?.featured_image_url)) {
+        // Delete old image if it exists and is different
+        if (post?.featured_image_url && post.featured_image_url !== featuredImageUrl) {
+          await deleteOldFeaturedImage(post.featured_image_url);
+        }
+
+        // Upload new image
+        newFeaturedImageUrl = await uploadFeaturedImage();
+      }
+
       const url = mode === 'create' ? '/api/posts' : `/api/posts/${post?.id}`;
       const method = mode === 'create' ? 'POST' : 'PUT';
 
@@ -64,6 +148,7 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
           slug,
           excerpt,
           content_lexical: content,
+          featured_image_url: newFeaturedImageUrl,
           published_at: isPublished ? (post?.published_at || new Date().toISOString()) : null,
         }),
       });
@@ -158,6 +243,15 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
               placeholder="Brief description of your post"
             />
           </div>
+
+          {/* Featured Image */}
+          <FeaturedImageUpload
+            value={featuredImageUrl}
+            onChange={(url, file) => {
+              setFeaturedImageUrl(url);
+              setFeaturedImageFile(file);
+            }}
+          />
 
           {/* Content - Lexical Rich-text Editor */}
           <div className='text-black'>
