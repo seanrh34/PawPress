@@ -20,15 +20,30 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     fetchUser();
-  }, []);
+
+    // Listen for profile update events
+    const handleProfileUpdate = () => {
+      fetchUser();
+    };
+
+    window.addEventListener('profileUpdated', handleProfileUpdate);
+
+    return () => {
+      window.removeEventListener('profileUpdated', handleProfileUpdate);
+    };
+  }, [pathname]); // Refetch when route changes
 
   const fetchUser = async () => {
     try {
-      const response = await fetch('/api/auth/session');
+      const response = await fetch('/api/auth/session', {
+        cache: 'no-store', // Prevent caching
+      });
       const data = await response.json();
       
       if (data.authenticated) {
         setUser(data.user);
+      } else {
+        setUser(null);
       }
     } catch (error) {
       console.error('Error fetching user:', error);
@@ -41,6 +56,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     setLoggingOut(true);
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
+      setUser(null); // Clear user state immediately
       router.push('/admin/login');
       router.refresh();
     } catch (error) {
@@ -62,7 +78,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="flex justify-between items-center h-16">
             {/* Left: Logo & Nav Links */}
             <div className="flex items-center gap-8">
-              <Link href="/admin" className="text-xl font-bold text-gray-900">
+              <Link href="/" className="text-xl font-bold text-gray-900">
                 PawPress
               </Link>
               <nav className="hidden md:flex items-center gap-6">
@@ -123,21 +139,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               {!loading && user && (
                 <>
                   <div className="hidden sm:block border-l border-gray-300 h-6"></div>
-                  <div className="hidden sm:flex items-center gap-3">
-                    <div className="text-right">
-                      <div className="text-sm font-medium text-gray-900">
-                        {user.display_name || user.email}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          user.role === 'master'
-                            ? 'bg-purple-100 text-purple-800'
-                            : 'bg-blue-100 text-blue-800'
-                        }`}>
-                          {user.role}
-                        </span>
-                      </div>
+                  <div className="hidden sm:flex items-center gap-2">
+                    <div className="text-sm font-medium text-gray-900">
+                      {user.display_name || user.email}
                     </div>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      user.role === 'master'
+                        ? 'bg-purple-100 text-purple-800'
+                        : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      {user.role}
+                    </span>
                   </div>
                 </>
               )}

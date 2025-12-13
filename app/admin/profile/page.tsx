@@ -65,6 +65,12 @@ export default function ProfilePage() {
 
       setSuccess('Profile updated successfully!');
       setUser(data.profile);
+      // Force router to refetch layout data
+      router.refresh();
+      // Refetch profile to ensure we have latest data
+      await fetchProfile();
+      // Trigger event for layout to update
+      window.dispatchEvent(new Event('profileUpdated'));
     } catch (err) {
       setError('An unexpected error occurred');
     } finally {
@@ -135,7 +141,7 @@ export default function ProfilePage() {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Enter your display name"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-black focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               disabled={saving}
             />
             <p className="text-xs text-gray-500 mt-1">

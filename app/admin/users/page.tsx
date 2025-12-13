@@ -148,8 +148,8 @@ export default function UsersPage() {
           </button>
         ) : (
           <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-            <h2 className="text-xl font-semibold mb-4">Create New Admin Account</h2>
-            <form onSubmit={handleCreateAdmin} className="space-y-4">
+            <h2 className="text-xl text-black font-semibold mb-4">Create New Admin Account</h2>
+            <form onSubmit={handleCreateAdmin} className="text-black space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Email
@@ -158,6 +158,7 @@ export default function UsersPage() {
                   type="email"
                   required
                   value={newEmail}
+                  placeholder='john@example.com'
                   onChange={(e) => setNewEmail(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   disabled={creating}
@@ -173,6 +174,7 @@ export default function UsersPage() {
                   required
                   minLength={6}
                   value={newPassword}
+                  placeholder='$ecretPass123'
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   disabled={creating}
@@ -187,6 +189,7 @@ export default function UsersPage() {
                 <input
                   type="text"
                   value={newDisplayName}
+                  placeholder='John Doe'
                   onChange={(e) => setNewDisplayName(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   disabled={creating}

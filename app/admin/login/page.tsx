@@ -144,7 +144,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <div className="space-y-4">
+          <div className="space-y-4 text-black">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                 Email address
@@ -156,6 +156,7 @@ export default function LoginPage() {
                 autoComplete="email"
                 required
                 value={email}
+                placeholder='john@example.com'
                 onChange={(e) => setEmail(e.target.value)}
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 disabled={loading}
@@ -173,6 +174,7 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 required
                 value={password}
+                placeholder='$ecretPass123'
                 onChange={(e) => setPassword(e.target.value)}
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 disabled={loading}
