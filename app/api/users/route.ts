@@ -1,27 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireMaster } from '@/lib/auth';
+import { requireMaster, getAllUserProfiles } from '@/lib/auth';
 import { createClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
 
 // GET all user profiles (master only)
 export async function GET() {
   try {
-    await requireMaster();
-    
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json(data);
+    const profiles = await getAllUserProfiles();
+    return NextResponse.json(profiles);
   } catch (error) {
     return NextResponse.json(
       { error: 'Unauthorized' },

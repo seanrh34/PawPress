@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase-server';
 
 // PUT update own profile
