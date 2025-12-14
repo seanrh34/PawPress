@@ -36,8 +36,11 @@ function InitialStatePlugin({ initialState }: { initialState: SerializedEditorSt
 
   useEffect(() => {
     if (initialState) {
-      const editorState = editor.parseEditorState(initialState);
-      editor.setEditorState(editorState);
+      // Use queueMicrotask to defer state update and avoid flushSync warning
+      queueMicrotask(() => {
+        const editorState = editor.parseEditorState(initialState);
+        editor.setEditorState(editorState);
+      });
     }
   }, []); // Only run once on mount
 

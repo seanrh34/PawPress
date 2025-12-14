@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getAuthenticatedSupabaseClient } from '@/lib/supabase-server';
 import { lexicalToHtml } from '@/lib/lexicalToHtml';
 import { processAndUploadImages } from '@/lib/uploadImages';
 import { getUser } from '@/lib/auth';
@@ -7,10 +8,29 @@ import { getUser } from '@/lib/auth';
 // GET all posts
 export async function GET() {
   try {
-    const { data, error } = await supabase
-      .from('posts')
-      .select('*')
-      .order('created_at', { ascending: false });
+    // Check if user is authenticated
+    const user = await getUser();
+    
+    let data, error;
+    
+    if (user) {
+      // Authenticated users (admins) can see all posts including drafts
+      const authSupabase = await getAuthenticatedSupabaseClient();
+      const result = await authSupabase
+        .from('posts')
+        .select('*')
+        .order('created_at', { ascending: false });
+      data = result.data;
+      error = result.error;
+    } else {
+      // Public users can only see published posts
+      const result = await supabase
+        .from('posts')
+        .select('*')
+        .order('created_at', { ascending: false });
+      data = result.data;
+      error = result.error;
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -71,7 +91,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { data, error } = await supabase
+    // Use authenticated client for admin operations
+    const authSupabase = await getAuthenticatedSupabaseClient();
+    
+    const { data, error } = await authSupabase
       .from('posts')
       .insert([
         {

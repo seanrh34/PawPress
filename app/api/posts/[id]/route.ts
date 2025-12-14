@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getAuthenticatedSupabaseClient } from '@/lib/supabase-server';
 import { lexicalToHtml } from '@/lib/lexicalToHtml';
 import { processAndUploadImages } from '@/lib/uploadImages';
 import { getUser } from '@/lib/auth';
@@ -11,11 +12,32 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const { data, error } = await supabase
-      .from('posts')
-      .select('*')
-      .eq('id', id)
-      .single();
+    
+    // Check if user is authenticated
+    const user = await getUser();
+    
+    let data, error;
+    
+    if (user) {
+      // Authenticated users (admins) can see all posts including drafts
+      const authSupabase = await getAuthenticatedSupabaseClient();
+      const result = await authSupabase
+        .from('posts')
+        .select('*')
+        .eq('id', id)
+        .single();
+      data = result.data;
+      error = result.error;
+    } else {
+      // Public users can only see published posts
+      const result = await supabase
+        .from('posts')
+        .select('*')
+        .eq('id', id)
+        .single();
+      data = result.data;
+      error = result.error;
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 404 });
@@ -71,7 +93,10 @@ export async function PUT(
       }
     }
 
-    const { data, error } = await supabase
+    // Use authenticated client for admin operations
+    const authSupabase = await getAuthenticatedSupabaseClient();
+    
+    const { data, error } = await authSupabase
       .from('posts')
       .update({
         title,
@@ -111,9 +136,22 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Check authentication
+  const user = await getUser();
+  if (!user) {
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401 }
+    );
+  }
+
   try {
     const { id } = await params;
-    const { error } = await supabase
+    
+    // Use authenticated client for admin operations
+    const authSupabase = await getAuthenticatedSupabaseClient();
+    
+    const { error } = await authSupabase
       .from('posts')
       .delete()
       .eq('id', id);

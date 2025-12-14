@@ -31,3 +31,8 @@ export async function createClient() {
     }
   );
 }
+
+// Alias for getAuthenticatedSupabaseClient to match API route usage
+export async function getAuthenticatedSupabaseClient() {
+  return createClient();
+}

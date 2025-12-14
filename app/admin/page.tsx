@@ -195,12 +195,18 @@ export default function AdminDashboard() {
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex gap-2 items-center">
-                          <Link
-                            href={`/posts/${post.slug}`}
-                            className="text-blue-600 hover:text-blue-800 text-sm"
-                          >
-                            View
-                          </Link>
+                          {post.published_at ? (
+                            <Link
+                              href={`/posts/${post.slug}`}
+                              className="text-blue-600 hover:text-blue-800 text-sm"
+                            >
+                              View
+                            </Link>
+                          ) : (
+                            <span className="text-gray-400 text-sm cursor-not-allowed">
+                              View
+                            </span>
+                          )}
                           <span className="text-gray-300">|</span>
                           <Link
                             href={`/admin/posts/${post.id}/edit`}
