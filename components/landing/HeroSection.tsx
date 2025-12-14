@@ -1,9 +1,29 @@
+'use client';
+
 import Image from 'next/image';
 import Link from 'next/link';
 
 export default function HeroSection() {
+  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    e.preventDefault();
+    const hash = href.includes('#') ? href.split('#')[1] : '';
+    if (hash) {
+      const element = document.getElementById(hash);
+      if (element) {
+        const navbarHeight = 64; // h-16 = 64px
+        const elementPosition = element.getBoundingClientRect().top + window.scrollY;
+        const offsetPosition = elementPosition - navbarHeight;
+        
+        window.scrollTo({
+          top: offsetPosition,
+          behavior: "smooth"
+        });
+      }
+    }
+  };
+
   return (
-    <section className="bg-white py-20">
+    <section className="bg-white py-20" id="home">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center">
           {/* Logo Placeholder */}
@@ -34,12 +54,14 @@ export default function HeroSection() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               href="#posts"
+              onClick={(e) => handleLinkClick(e, '#posts')}
               className="px-8 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold text-lg shadow-md hover:shadow-lg"
             >
               Read Our Posts
             </Link>
             <Link
               href="#contact"
+              onClick={(e) => handleLinkClick(e, '#contact')}
               className="px-8 py-4 bg-white text-blue-600 border-2 border-blue-600 rounded-lg hover:bg-blue-50 transition-colors font-semibold text-lg"
             >
               Get in Touch

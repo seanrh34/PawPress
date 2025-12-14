@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 export default function PawPressSection() {
   return (
-    <section className="bg-white py-20">
+    <section className="bg-white py-20 text-black" id="pawpress">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto">
           <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl p-8 md:p-12 border-2 border-blue-100">
