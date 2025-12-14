@@ -29,13 +29,6 @@ export default async function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <h1 className="text-2xl font-bold text-gray-900">PawPress</h1>
-        </div>
-      </header>
-
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="text-center mb-12">
@@ -61,15 +54,6 @@ export default async function Home() {
           </div>
         )}
       </main>
-
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 mt-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <p className="text-center text-gray-600">
-            Built with Next.js & Supabase | Customizable & Forkable
-          </p>
-        </div>
-      </footer>
     </div>
   );
 }
