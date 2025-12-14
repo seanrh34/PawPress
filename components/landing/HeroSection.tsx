@@ -10,7 +10,7 @@ export default function HeroSection() {
     if (hash) {
       const element = document.getElementById(hash);
       if (element) {
-        const navbarHeight = 64; // h-16 = 64px
+        const navbarHeight = 64; // h-16 = 64px (fixed header height)
         const elementPosition = element.getBoundingClientRect().top + window.scrollY;
         const offsetPosition = elementPosition - navbarHeight;
         

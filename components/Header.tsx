@@ -9,22 +9,27 @@ export default function Header() {
 
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault();
+    // Close mobile menu first
+    setIsOpen(false);
+    
     // Extract the hash from the href (e.g., "/#apps" -> "apps")
     const hash = href.includes('#') ? href.split('#')[1] : '';
     if (hash) {
-      const element = document.getElementById(hash);
-      if (element) {
-        const navbarHeight = 64; // h-16 = 64px
-        const elementPosition = element.getBoundingClientRect().top + window.scrollY;
-        const offsetPosition = elementPosition - navbarHeight;
-        
-        window.scrollTo({
-          top: offsetPosition,
-          behavior: "smooth"
-        });
-      }
+      // Delay scroll slightly to allow mobile menu to close
+      setTimeout(() => {
+        const element = document.getElementById(hash);
+        if (element) {
+          const navbarHeight = 64; // h-16 = 64px (fixed header height)
+          const elementPosition = element.getBoundingClientRect().top + window.scrollY;
+          const offsetPosition = elementPosition - navbarHeight;
+          
+          window.scrollTo({
+            top: offsetPosition,
+            behavior: "smooth"
+          });
+        }
+      }, 100);
     }
-    setIsOpen(false);
   };
 
   return (
