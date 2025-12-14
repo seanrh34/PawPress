@@ -14,7 +14,18 @@ export interface UserProfile {
 /**
  * Get the current authenticated user session
  * Returns null if not authenticated
- * Note: For security-critical operations, use getUser() instead
+ * 
+ * WARNING: This reads directly from cookies and may not be authentic!
+ * Only use for:
+ * - Read-only pages (viewing content)
+ * - Performance-critical checks where security is less critical
+ * 
+ * For security-critical operations (POST/PUT/DELETE), ALWAYS use getUser() instead!
+ * Pages that require secure auth:
+ * - Post creation/editing
+ * - User management
+ * - Profile editing
+ * - Any API routes that mutate data
  */
 export async function getSession() {
   const supabase = await createClient();
