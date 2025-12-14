@@ -12,7 +12,7 @@ export default function PawPressSection() {
               </h2>
               <p className="text-xl text-gray-700 max-w-2xl mx-auto">
                 This blog is powered by PawPress, an open-source CMS built with Next.js and Supabase. 
-                It's free, customizable, and ready to deploy.
+                It's free, customizable, and easy to deploy.
               </p>
             </div>
 
@@ -46,7 +46,7 @@ export default function PawPressSection() {
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <a
-                  href="https://github.com/yourusername/pawpress"
+                  href="https://github.com/seanrh34/PawPress"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center justify-center px-6 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors font-semibold"
@@ -56,12 +56,6 @@ export default function PawPressSection() {
                   </svg>
                   View on GitHub
                 </a>
-                <Link
-                  href="/admin"
-                  className="inline-flex items-center justify-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
-                >
-                  Try the Demo
-                </Link>
               </div>
             </div>
           </div>
