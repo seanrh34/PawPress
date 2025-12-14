@@ -40,16 +40,7 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
     }
   };
 
-  const uploadFeaturedImage = async (): Promise<string | null> => {
-    if (!featuredImageFile && !featuredImageUrl) {
-      return null;
-    }
-
-    // If it's a URL (no file), return the URL as-is
-    if (featuredImageUrl && !featuredImageFile) {
-      return featuredImageUrl;
-    }
-
+  const uploadFeaturedImage = async (): Promise<string> => {
     // If it's a file, upload to Supabase
     if (featuredImageFile) {
       try {
@@ -79,7 +70,8 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
       }
     }
 
-    return null;
+    // If it's a URL (no file), return the URL as-is
+    return featuredImageUrl || '';
   };
 
   const deleteOldFeaturedImage = async (oldUrl: string | null) => {
@@ -114,26 +106,25 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
       return;
     }
 
-    if (!featuredImageUrl && !featuredImageFile) {
-      alert('Please add a featured image');
+    const URL_PATTERN = /^https?:\/\/.+\..+/i;
+    const hasValidUrl = featuredImageUrl && URL_PATTERN.test(featuredImageUrl);
+    const hasFile = !!featuredImageFile;
+
+    if (!hasValidUrl && !hasFile) {
+      alert('Please add a valid featured image');
       return;
     }
 
     setIsSaving(true);
 
     try {
-      let newFeaturedImageUrl = featuredImageUrl;
-
-      // If there's a new image to upload
-      if (featuredImageFile || (featuredImageUrl !== post?.featured_image_url)) {
-        // Delete old image if it exists and is different
-        if (post?.featured_image_url && post.featured_image_url !== featuredImageUrl) {
-          await deleteOldFeaturedImage(post.featured_image_url);
-        }
-
-        // Upload new image
-        newFeaturedImageUrl = await uploadFeaturedImage();
+      // Delete old image if it exists and is different
+      if (post?.featured_image_url && (featuredImageFile || featuredImageUrl !== post.featured_image_url)) {
+        await deleteOldFeaturedImage(post.featured_image_url);
       }
+
+      // Upload new image or use provided URL
+      const newFeaturedImageUrl = await uploadFeaturedImage();
 
       const url = mode === 'create' ? '/api/posts' : `/api/posts/${post?.id}`;
       const method = mode === 'create' ? 'POST' : 'PUT';
@@ -246,7 +237,7 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
 
           {/* Featured Image */}
           <FeaturedImageUpload
-            value={featuredImageUrl}
+            value={post?.featured_image_url || null}
             onChange={(url, file) => {
               setFeaturedImageUrl(url);
               setFeaturedImageFile(file);
