@@ -80,8 +80,8 @@ export default function PostsSection({ posts }: PostsSectionProps) {
             Latest Posts
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Discover our latest articles, tutorials, and insights. Stay updated with fresh content 
-            covering web development, technology trends, and best practices in modern software engineering.
+            Here is where I will write about my thoughts, experiences, and insights. Stay updated with fresh content 
+            covering web development, technology trends, and other topics that I find interesting.
           </p>
         </div>
 

@@ -42,13 +42,22 @@ export default function HeroSection() {
           </h1>
           
           <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8 leading-relaxed">
-            Insights, stories, and perspectives from the 34cats team. 
-            We write about technology, development, design, and the lessons we learn building digital products.
+            Insights, stories, and perspectives from the{' '}
+            <a 
+              href="https://seanhardjanto.com" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-700 underline transition-colors"
+            >
+              developer
+            </a>
+            {' '}behind 34cats. 
+            I write about technology, development, design, and the lessons I learn from building digital products.
           </p>
 
           <p className="text-lg text-gray-500 max-w-2xl mx-auto mb-10">
-            Join us as we explore the intersection of code, creativity, and problem-solving. 
-            From technical deep-dives to industry observations, we share what we discover along the way.
+            Join me as I write about my journey in tech. 
+            From technical deep-dives to personal reflections, I share what I discover along the way.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { FaGithub, FaLinkedin, FaEnvelope } from 'react-icons/fa';
 
 export default function ContactSection() {
   return (
@@ -13,26 +14,35 @@ export default function ContactSection() {
             </h2>
             <p className="text-xl text-gray-600">
               Have a project in mind? Want to discuss a collaboration or just say hello? 
-              We'd love to hear from you. Drop us a message and we'll get back to you as soon as possible.
+              I'd love to hear from you. Drop me a message and I'll get back to you as soon as possible.
             </p>
           </div>
 
-          <div className="mt-12 grid md:grid-cols-3 gap-6 text-center">
-            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
-              <div className="text-3xl mb-2">📧</div>
-              <h4 className="font-semibold text-gray-900 mb-1">Email</h4>
-              <p className="text-sm text-gray-600">hello@34cats.com</p>
-            </div>
-            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
-              <div className="text-3xl mb-2">💼</div>
-              <h4 className="font-semibold text-gray-900 mb-1">Work With Us</h4>
-              <p className="text-sm text-gray-600">Explore collaboration</p>
-            </div>
-            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
-              <div className="text-3xl mb-2">🐙</div>
-              <h4 className="font-semibold text-gray-900 mb-1">GitHub</h4>
-              <p className="text-sm text-gray-600">Check out our projects</p>
-            </div>
+          <div className="mt-12 flex justify-center gap-8 text-4xl text-gray-700">
+            <a
+              href="mailto:34cats.dev@gmail.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-blue-600 transition-colors"
+            >
+              <FaEnvelope />
+            </a>
+            <a
+              href="https://www.linkedin.com/in/sean-hardjanto-0b8874139/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-blue-600 transition-colors"
+            >
+              <FaLinkedin />
+            </a>
+            <a
+              href="https://github.com/seanrh34"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-blue-600 transition-colors"
+            >
+              <FaGithub />
+            </a>
           </div>
         </div>
       </div>
