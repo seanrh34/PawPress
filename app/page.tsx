@@ -1,6 +1,8 @@
-import Link from "next/link";
-import PostCard from "@/components/PostCard";
 import { Post } from "@/lib/types";
+import HeroSection from "@/components/landing/HeroSection";
+import PostsSection from "@/components/landing/PostsSection";
+import PawPressSection from "@/components/landing/PawPressSection";
+import ContactSection from "@/components/landing/ContactSection";
 
 async function getPublishedPosts(): Promise<Post[]> {
   try {
@@ -28,32 +30,11 @@ export default async function Home() {
   const posts = await getPublishedPosts();
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="text-center mb-12">
-          <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Welcome to PawPress
-          </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            A simple, customizable CMS built with Next.js and Supabase. 
-            Fork this repo and make it your own!
-          </p>
-        </div>
-
-        {/* Posts Grid - Dynamic */}
-        {posts.length > 0 ? (
-          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-            {posts.map((post) => (
-              <PostCard key={post.id} post={post} />
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12">
-            <p className="text-gray-600">No posts yet. Check back soon!</p>
-          </div>
-        )}
-      </main>
+    <div className="min-h-screen">
+      <HeroSection />
+      <PostsSection posts={posts} />
+      <PawPressSection />
+      <ContactSection />
     </div>
   );
 }
