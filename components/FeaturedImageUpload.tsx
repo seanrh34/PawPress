@@ -6,7 +6,7 @@ import Toggle from './Toggle';
 
 interface FeaturedImageUploadProps {
   value: string | null;
-  onChange: (url: string, file?: File) => void;
+  onChange: (url: string, file?: File, isExternalUrl?: boolean) => void;
 }
 
 export default function FeaturedImageUpload({ value, onChange }: FeaturedImageUploadProps) {
@@ -66,7 +66,7 @@ export default function FeaturedImageUpload({ value, onChange }: FeaturedImageUp
               const newUrl = e.target.value;
               setUrl(newUrl);
               if (newUrl && URL_PATTERN.test(newUrl)) {
-                onChange(newUrl);
+                onChange(newUrl, undefined, true);
               }
             }}
             placeholder="https://example.com/image.jpg"

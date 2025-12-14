@@ -24,6 +24,7 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(post?.featured_image_url || null);
   const [featuredImageFile, setFeaturedImageFile] = useState<File>();
+  const [isExternalUrl, setIsExternalUrl] = useState(false);
 
   // Auto-generate slug from title (only in create mode)
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,7 +71,46 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
       }
     }
 
-    // If it's a URL (no file), return the URL as-is
+    // If it's an external URL, download and upload to Supabase
+    if (isExternalUrl && featuredImageUrl) {
+      try {
+        // Download the image
+        const response = await fetch(featuredImageUrl);
+        if (!response.ok) throw new Error('Failed to download image');
+        
+        const blob = await response.blob();
+        
+        // Determine file extension from content type or URL
+        const contentType = response.headers.get('content-type') || 'image/jpeg';
+        let extension = contentType.split('/')[1]?.split(';')[0] || 'jpg';
+        if (extension === 'jpeg') extension = 'jpg';
+        
+        const timestamp = Date.now();
+        const randomStr = Math.random().toString(36).substring(2, 15);
+        const fileName = `featured-${timestamp}-${randomStr}.${extension}`;
+
+        const { data, error } = await supabase.storage
+          .from('post-images')
+          .upload(fileName, blob, {
+            contentType: contentType,
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('post-images')
+          .getPublicUrl(data.path);
+
+        return publicUrl;
+      } catch (error) {
+        console.error('Failed to download and upload featured image:', error);
+        throw new Error('Failed to download and upload featured image');
+      }
+    }
+
+    // If it's already a Supabase URL, return as-is
     return featuredImageUrl || '';
   };
 
@@ -162,22 +202,6 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-4">
-              <Link href="/admin" className="text-gray-600 hover:text-gray-900">
-                ← Back to Dashboard
-              </Link>
-            </div>
-            <Link href="/" className="text-gray-600 hover:text-gray-900">
-              View Site
-            </Link>
-          </div>
-        </div>
-      </header>
-
       {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <h1 className="text-3xl font-bold text-gray-900 mb-8">
@@ -238,9 +262,10 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
           {/* Featured Image */}
           <FeaturedImageUpload
             value={post?.featured_image_url || null}
-            onChange={(url, file) => {
+            onChange={(url, file, isExternal) => {
               setFeaturedImageUrl(url);
               setFeaturedImageFile(file);
+              setIsExternalUrl(isExternal || false);
             }}
           />
 
