@@ -11,7 +11,8 @@ import {
   $getSelection,
   $isRangeSelection,
   $createParagraphNode,
-  $getNodeByKey
+  $getNodeByKey,
+  BaseSelection
 } from "lexical";
 import { $isLinkNode, TOGGLE_LINK_COMMAND } from "@lexical/link";
 import {
@@ -93,7 +94,7 @@ function FloatingLinkEditor({ editor }: { editor: any }) {
   const mouseDownRef = useRef(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [isEditMode, setEditMode] = useState(false);
-  const [lastSelection, setLastSelection] = useState(null);
+  const [lastSelection, setLastSelection] = useState<BaseSelection | null>(null);
 
   const updateLinkEditor = useCallback(() => {
     const selection = $getSelection();
