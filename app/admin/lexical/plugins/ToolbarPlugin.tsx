@@ -73,7 +73,7 @@ function Divider() {
   return <div className="divider" />;
 }
 
-function positionEditorElement(editor, rect) {
+function positionEditorElement(editor: HTMLElement, rect: DOMRect | null) {
   if (rect === null) {
     editor.style.opacity = "0";
     editor.style.top = "-1000px";
@@ -87,8 +87,8 @@ function positionEditorElement(editor, rect) {
   }
 }
 
-function FloatingLinkEditor({ editor }) {
-  const editorRef = useRef(null);
+function FloatingLinkEditor({ editor }: { editor: any }) {
+  const editorRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef(null);
   const mouseDownRef = useRef(false);
   const [linkUrl, setLinkUrl] = useState("");
@@ -228,7 +228,7 @@ function FloatingLinkEditor({ editor }) {
   );
 }
 
-function Select({ onChange, className, options, value }) {
+function Select({ onChange, className, options, value }: { onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; className: string; options: string[]; value: string }) {
   return (
     <select className={className} onChange={onChange} value={value}>
       <option hidden={true} value="" />
@@ -241,7 +241,7 @@ function Select({ onChange, className, options, value }) {
   );
 }
 
-function getSelectedNode(selection) {
+function getSelectedNode(selection: any) {
   const anchor = selection.anchor;
   const focus = selection.focus;
   const anchorNode = selection.anchor.getNode();
@@ -262,8 +262,13 @@ function BlockOptionsDropdownList({
   blockType,
   toolbarRef,
   setShowBlockOptionsDropDown
+}: {
+  editor: any;
+  blockType: string;
+  toolbarRef: React.RefObject<HTMLDivElement>;
+  setShowBlockOptionsDropDown: (show: boolean) => void;
 }) {
-  const dropDownRef = useRef(null);
+  const dropDownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const toolbar = toolbarRef.current;

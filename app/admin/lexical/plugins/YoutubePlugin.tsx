@@ -53,7 +53,7 @@ export default function YoutubePlugin() {
             <button
               type="button"
               className={`btn-primary ${(!url || (url && !isValidYouTubeURL(url))) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-              disabled={!url || (url && !isValidYouTubeURL(url))}
+              disabled={Boolean(!url || (url && !isValidYouTubeURL(url)))}
               onClick={onEmbed}
             >
               Embed
