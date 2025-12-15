@@ -111,7 +111,7 @@ export default function ImagePlugin() {
             <button
               type="button"
               className={`btn-primary ${((!url || (url && !isValidURL(url))) && !file) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-              disabled={(!url || (url && !isValidURL(url))) && !file}
+              disabled={Boolean((!url || (url && !isValidURL(url))) && !file)}
               onClick={onAddImage}
             >
               Add Image
