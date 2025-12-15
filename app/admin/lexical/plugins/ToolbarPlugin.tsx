@@ -57,7 +57,7 @@ const supportedBlockTypes = new Set([
   "ol"
 ]);
 
-const blockTypeToBlockName = {
+const blockTypeToBlockName: Record<string, string> = {
   code: "Code Block",
   h1: "Large Heading",
   h2: "Medium Heading",
@@ -90,7 +90,7 @@ function positionEditorElement(editor: HTMLElement, rect: DOMRect | null) {
 
 function FloatingLinkEditor({ editor }: { editor: any }) {
   const editorRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const mouseDownRef = useRef(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [isEditMode, setEditMode] = useState(false);
@@ -153,7 +153,7 @@ function FloatingLinkEditor({ editor }: { editor: any }) {
 
   useEffect(() => {
     return mergeRegister(
-      editor.registerUpdateListener(({ editorState }) => {
+      editor.registerUpdateListener(({ editorState }: { editorState: any }) => {
         editorState.read(() => {
           updateLinkEditor();
         });
@@ -266,7 +266,7 @@ function BlockOptionsDropdownList({
 }: {
   editor: any;
   blockType: string;
-  toolbarRef: React.RefObject<HTMLDivElement>;
+  toolbarRef: React.RefObject<HTMLDivElement | null>;
   setShowBlockOptionsDropDown: (show: boolean) => void;
 }) {
   const dropDownRef = useRef<HTMLDivElement>(null);
@@ -287,8 +287,8 @@ function BlockOptionsDropdownList({
     const toolbar = toolbarRef.current;
 
     if (dropDown !== null && toolbar !== null) {
-      const handle = (event) => {
-        const target = event.target;
+      const handle = (event: MouseEvent) => {
+        const target = event.target as Node;
 
         if (!dropDown.contains(target) && !toolbar.contains(target)) {
           setShowBlockOptionsDropDown(false);
@@ -446,11 +446,11 @@ function BlockOptionsDropdownList({
 
 export default function ToolbarPlugin() {
   const [editor] = useLexicalComposerContext();
-  const toolbarRef = useRef(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [blockType, setBlockType] = useState("paragraph");
-  const [selectedElementKey, setSelectedElementKey] = useState(null);
+  const [selectedElementKey, setSelectedElementKey] = useState<string | null>(null);
   const [showBlockOptionsDropDown, setShowBlockOptionsDropDown] = useState(
     false
   );
@@ -516,7 +516,7 @@ export default function ToolbarPlugin() {
 
   useEffect(() => {
     return mergeRegister(
-      editor.registerUpdateListener(({ editorState }) => {
+      editor.registerUpdateListener(({ editorState }: { editorState: any }) => {
         editorState.read(() => {
           updateToolbar();
         });
@@ -550,7 +550,7 @@ export default function ToolbarPlugin() {
 
   const codeLanguges = useMemo(() => getCodeLanguages(), []);
   const onCodeLanguageSelect = useCallback(
-    (e) => {
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
       editor.update(() => {
         if (selectedElementKey !== null) {
           const node = $getNodeByKey(selectedElementKey);
@@ -576,7 +576,7 @@ export default function ToolbarPlugin() {
       <button
         disabled={!canUndo}
         onClick={() => {
-          editor.dispatchCommand(UNDO_COMMAND);
+          editor.dispatchCommand(UNDO_COMMAND, undefined);
         }}
         className="toolbar-item spaced"
         aria-label="Undo"
@@ -586,7 +586,7 @@ export default function ToolbarPlugin() {
       <button
         disabled={!canRedo}
         onClick={() => {
-          editor.dispatchCommand(REDO_COMMAND);
+          editor.dispatchCommand(REDO_COMMAND, undefined);
         }}
         className="toolbar-item"
         aria-label="Redo"
