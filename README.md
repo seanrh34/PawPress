@@ -341,4 +341,8 @@ Ensure all environment variables are set in your hosting platform:
 
 ## License
 
-MIT License - Feel free to use this project for your own blog!
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+Copyright (c) 2025 Sean Hardjanto (34cats)
+
+Feel free to use this project for your own blog!
