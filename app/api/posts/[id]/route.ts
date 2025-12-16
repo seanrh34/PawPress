@@ -69,7 +69,23 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    let { title, slug, content_lexical, excerpt, featured_image_url, published_at } = body;
+    let { title, slug, content_lexical, excerpt, featured_image_url, published_at, category_id } = body;
+
+    // Validate category if provided
+    if (category_id) {
+      const { data: category, error: categoryError } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('id', category_id)
+        .single();
+
+      if (categoryError || !category) {
+        return NextResponse.json(
+          { error: 'Invalid category' },
+          { status: 400 }
+        );
+      }
+    }
 
     // Process blob images: upload to Supabase and replace with permanent URLs
     if (content_lexical) {
@@ -96,18 +112,25 @@ export async function PUT(
     // Use authenticated client for admin operations
     const authSupabase = await getAuthenticatedSupabaseClient();
     
+    const updateData: any = {
+      title,
+      slug,
+      content_lexical,
+      content_html,
+      excerpt,
+      featured_image_url,
+      published_at,
+      updated_at: new Date().toISOString(),
+    };
+
+    // Only update category_id if provided
+    if (category_id) {
+      updateData.category_id = category_id;
+    }
+
     const { data, error } = await authSupabase
       .from('posts')
-      .update({
-        title,
-        slug,
-        content_lexical,
-        content_html,
-        excerpt,
-        featured_image_url,
-        published_at,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();

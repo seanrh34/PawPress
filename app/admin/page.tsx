@@ -21,7 +21,26 @@ export default function AdminDashboard() {
         throw new Error('Failed to fetch posts');
       }
       const data = await response.json();
-      setPosts(data);
+      
+      // Fetch categories for each post
+      const postsWithCategories = await Promise.all(
+        data.map(async (post: Post) => {
+          if (post.category_id) {
+            try {
+              const categoryResponse = await fetch(`/api/category/${post.category_id}`);
+              if (categoryResponse.ok) {
+                const category = await categoryResponse.json();
+                return { ...post, category };
+              }
+            } catch (err) {
+              console.error('Error fetching category:', err);
+            }
+          }
+          return post;
+        })
+      );
+      
+      setPosts(postsWithCategories);
     } catch (error) {
       console.error('Error fetching posts:', error);
     } finally {
@@ -167,6 +186,7 @@ export default function AdminDashboard() {
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -178,8 +198,17 @@ export default function AdminDashboard() {
                       <td className="px-4 py-4">
                         <div>
                           <div className="font-medium text-gray-900">{post.title}</div>
-                          <div className="text-sm text-gray-500">/posts/{post.slug}</div>
+                          <div className="text-sm text-gray-500">/{post.slug}</div>
                         </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        {post.category ? (
+                          <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                            {post.category.name}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-gray-400">No category</span>
+                        )}
                       </td>
                       <td className="px-4 py-4">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${

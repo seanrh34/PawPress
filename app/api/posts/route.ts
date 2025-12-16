@@ -58,12 +58,34 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    let { title, slug, content_lexical, excerpt, featured_image_url, published_at } = body;
+    let { title, slug, content_lexical, excerpt, featured_image_url, published_at, category_id } = body;
 
     // Validate required fields
     if (!title || !slug) {
       return NextResponse.json(
         { error: 'Title and slug are required' },
+        { status: 400 }
+      );
+    }
+
+    // Validate category_id is provided
+    if (!category_id) {
+      return NextResponse.json(
+        { error: 'Category is required' },
+        { status: 400 }
+      );
+    }
+
+    // Verify category exists
+    const { data: category, error: categoryError } = await supabase
+      .from('categories')
+      .select('id')
+      .eq('id', category_id)
+      .single();
+
+    if (categoryError || !category) {
+      return NextResponse.json(
+        { error: 'Invalid category' },
         { status: 400 }
       );
     }
@@ -105,6 +127,7 @@ export async function POST(request: NextRequest) {
           excerpt: excerpt || '',
           featured_image_url: featured_image_url || null,
           published_at: published_at || null,
+          category_id,
         },
       ])
       .select()

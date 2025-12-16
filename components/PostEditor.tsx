@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Editor from '@/components/Editor';
 import FeaturedImageUpload from '@/components/FeaturedImageUpload';
 import { SerializedEditorState } from 'lexical';
-import { Post } from '@/lib/types';
+import { Post, Category } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
 
 interface PostEditorProps {
@@ -25,6 +25,33 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
   const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(post?.featured_image_url || null);
   const [featuredImageFile, setFeaturedImageFile] = useState<File>();
   const [isExternalUrl, setIsExternalUrl] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryId, setCategoryId] = useState(post?.category_id || '');
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+
+  // Fetch categories on mount
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await fetch('/api/category');
+        if (!response.ok) throw new Error('Failed to fetch categories');
+        const data = await response.json();
+        setCategories(data);
+        
+        // Auto-select first category if creating new post and no category selected
+        if (mode === 'create' && !categoryId && data.length > 0) {
+          setCategoryId(data[0].id);
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+        alert('Failed to load categories. Please refresh the page.');
+      } finally {
+        setIsLoadingCategories(false);
+      }
+    };
+
+    fetchCategories();
+  }, [mode, categoryId]);
 
   // Auto-generate slug from title (only in create mode)
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -141,6 +168,11 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
       return;
     }
 
+    if (!categoryId) {
+      alert('Please select a category');
+      return;
+    }
+
     if (!content) {
       alert('Please add some content to your post');
       return;
@@ -181,6 +213,7 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
           content_lexical: content,
           featured_image_url: newFeaturedImageUrl,
           published_at: isPublished ? (post?.published_at || new Date().toISOString()) : null,
+          category_id: categoryId,
         }),
       });
 
@@ -257,6 +290,35 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
               className="form-textarea"
               placeholder="Brief description of your post"
             />
+          </div>
+
+          {/* Category */}
+          <div>
+            <label htmlFor="category" className="form-label">
+              Category *
+            </label>
+            {isLoadingCategories ? (
+              <div className="text-sm text-gray-500">Loading categories...</div>
+            ) : categories.length === 0 ? (
+              <div className="text-sm text-red-600">
+                No categories available. Please create a category first.
+              </div>
+            ) : (
+              <select
+                id="category"
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+                required
+                className="form-input"
+              >
+                <option value="">Select a category</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Featured Image */}
