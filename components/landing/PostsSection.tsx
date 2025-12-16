@@ -10,27 +10,7 @@ interface PostsSectionProps {
 
 export default function PostsSection({ posts }: PostsSectionProps) {
   const [currentPage, setCurrentPage] = useState(1);
-  const [postsPerPage, setPostsPerPage] = useState(9); // Default to lg size
-
-  // Update posts per page based on screen size
-  useEffect(() => {
-    const updatePostsPerPage = () => {
-      if (window.innerWidth < 768) {
-        // sm or smaller: 1 column, 3 rows
-        setPostsPerPage(3);
-      } else if (window.innerWidth < 1024) {
-        // md: 2 columns, 3 rows
-        setPostsPerPage(6);
-      } else {
-        // lg or bigger: 3 columns, 3 rows
-        setPostsPerPage(9);
-      }
-    };
-
-    updatePostsPerPage();
-    window.addEventListener('resize', updatePostsPerPage);
-    return () => window.removeEventListener('resize', updatePostsPerPage);
-  }, []);
+  const postsPerPage = 6; // Always 6 posts per page
 
   // Calculate pagination values
   const totalPages = Math.ceil(posts.length / postsPerPage);

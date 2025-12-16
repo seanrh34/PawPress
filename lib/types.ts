@@ -1,5 +1,14 @@
 import { SerializedEditorState } from 'lexical';
 
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Post {
   id: string;
   title: string;
@@ -11,4 +20,6 @@ export interface Post {
   published_at: string | null;
   created_at: string;
   updated_at: string;
+  category_id: string;
+  category?: Category;
 }
