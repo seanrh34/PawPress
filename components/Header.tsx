@@ -3,38 +3,50 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter, usePathname } from 'next/navigation';
 
 export default function Header() {
   const [isOpen, setIsOpen] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
 
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault();
     // Close mobile menu first
     setIsOpen(false);
     
-    // Extract the hash from the href (e.g., "/#apps" -> "apps")
+    // Extract the hash from the href (e.g., "/#home" -> "home")
     const hash = href.includes('#') ? href.split('#')[1] : '';
+    
+    // Check if we're on the homepage
+    const isHomepage = pathname === '/';
+    
     if (hash) {
-      // Delay scroll slightly to allow mobile menu to close
-      setTimeout(() => {
-        const element = document.getElementById(hash);
-        if (element) {
-          const navbarHeight = 64; // h-16 = 64px (fixed header height)
-          const elementPosition = element.getBoundingClientRect().top + window.scrollY;
-          const offsetPosition = elementPosition - navbarHeight;
-          
-          window.scrollTo({
-            top: offsetPosition,
-            behavior: "smooth"
-          });
-        }
-      }, 100);
+      if (!isHomepage) {
+        // If not on homepage, navigate there first, then scroll
+        router.push(`/#${hash}`);
+      } else {
+        // If already on homepage, just scroll to the section
+        setTimeout(() => {
+          const element = document.getElementById(hash);
+          if (element) {
+            const navbarHeight = 64; // h-16 = 64px (fixed header height)
+            const elementPosition = element.getBoundingClientRect().top + window.scrollY;
+            const offsetPosition = elementPosition - navbarHeight;
+            
+            window.scrollTo({
+              top: offsetPosition,
+              behavior: "smooth"
+            });
+          }
+        }, 100);
+      }
     }
   };
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center">
@@ -43,7 +55,7 @@ export default function Header() {
               alt="34cats Logo" 
               width={150} 
               height={40}
-              className="h-10 w-auto"
+              className="h-8 sm:h-10 md:h-12 lg:h-14 w-auto"
             />
           </Link>
 
@@ -52,34 +64,34 @@ export default function Header() {
             <Link 
               href="/#home"
               onClick={(e) => handleLinkClick(e, '/#home')}
-              className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+              className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
             >
               Home
             </Link>
             <Link 
               href="/#posts"
               onClick={(e) => handleLinkClick(e, '/#posts')}
-              className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+              className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
             >
               Posts
             </Link>
             <Link 
               href="/category"
-              className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+              className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
             >
               Categories
             </Link>
             <Link 
               href="/#pawpress"
               onClick={(e) => handleLinkClick(e, '/#pawpress')}
-              className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+              className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
             >
               Build Your Own
             </Link>
             <Link 
               href="/#contact"
               onClick={(e) => handleLinkClick(e, '/#contact')}
-              className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+              className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
             >
               Contact
             </Link>
@@ -110,35 +122,35 @@ export default function Header() {
               <Link 
                 href="/#home"
                 onClick={(e) => handleLinkClick(e, '/#home')}
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+                className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
               >
                 Home
               </Link>
               <Link 
                 href="/#posts"
                 onClick={(e) => handleLinkClick(e, '/#posts')}
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+                className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
               >
                 Posts
               </Link>
               <Link 
                 href="/category"
                 onClick={() => setIsOpen(false)}
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+                className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
               >
                 Categories
               </Link>
               <Link 
                 href="/#pawpress"
                 onClick={(e) => handleLinkClick(e, '/#pawpress')}
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+                className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
               >
                 Build Your Own
               </Link>
               <Link 
                 href="/#contact"
                 onClick={(e) => handleLinkClick(e, '/#contact')}
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+                className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
               >
                 Contact
               </Link>

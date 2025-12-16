@@ -42,6 +42,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       
       if (data.authenticated) {
         setUser(data.user);
+        setLoggingOut(false); // Reset logging out state when user is authenticated
       } else {
         setUser(null);
       }
@@ -74,7 +75,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-gray-50">
       {/* Navigation Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center h-16">
             {/* Left: Logo & Nav Links */}
             <div className="flex items-center gap-8">
@@ -84,7 +85,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <nav className="hidden md:flex items-center gap-6">
                 <Link
                   href="/admin"
-                  className={`text-sm font-medium transition-colors ${
+                  className={`text-md lg:text-xl font-medium transition-colors ${
                     pathname === '/admin'
                       ? 'text-blue-600'
                       : 'text-gray-600 hover:text-gray-900'
@@ -94,7 +95,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </Link>
                 <Link
                   href="/admin/posts/new"
-                  className={`text-sm font-medium transition-colors ${
+                  className={`text-md lg:text-xl font-medium transition-colors ${
                     pathname === '/admin/posts/new'
                       ? 'text-blue-600'
                       : 'text-gray-600 hover:text-gray-900'
@@ -102,10 +103,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 >
                   New Post
                 </Link>
+                <Link
+                  href="/admin/category"
+                  className={`text-md lg:text-xl font-medium transition-colors ${
+                    pathname?.startsWith('/admin/category')
+                      ? 'text-blue-600'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Manage Categories
+                </Link>
                 {user?.role === 'master' && (
                   <Link
                     href="/admin/users"
-                    className={`text-sm font-medium transition-colors ${
+                    className={`text-md lg:text-xl font-medium transition-colors ${
                       pathname === '/admin/users'
                         ? 'text-blue-600'
                         : 'text-gray-600 hover:text-gray-900'
@@ -116,7 +127,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 )}
                 <Link
                   href="/admin/profile"
-                  className={`text-sm font-medium transition-colors ${
+                  className={`text-md lg:text-xl font-medium transition-colors ${
                     pathname === '/admin/profile'
                       ? 'text-blue-600'
                       : 'text-gray-600 hover:text-gray-900'
@@ -131,7 +142,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="flex items-center gap-4">
               <Link
                 href="/"
-                className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                className="text-md lg:text-xl text-gray-600 hover:text-gray-900 transition-colors"
               >
                 View Site
               </Link>
@@ -185,6 +196,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               }`}
             >
               New Post
+            </Link>
+            <Link
+              href="/admin/category"
+              className={`text-sm font-medium whitespace-nowrap ${
+                pathname?.startsWith('/admin/category')
+                  ? 'text-blue-600'
+                  : 'text-gray-600'
+              }`}
+            >
+              Manage Categories
             </Link>
             {user?.role === 'master' && (
               <Link
