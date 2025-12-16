@@ -9,7 +9,7 @@ interface PostCardProps {
 export default function PostCard({ post }: PostCardProps) {
   return (
     <Link href={`/${post.slug}`}>
-      <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow h-full">
+      <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow h-full flex flex-col">
         {/* Featured Image */}
         <div className="h-48 bg-gray-200 relative">
           {post.featured_image_url ? (
@@ -39,11 +39,20 @@ export default function PostCard({ post }: PostCardProps) {
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="p-6 flex-1 flex flex-col">
+          {/* Category Badge */}
+          {post.category && (
+            <div className="mb-3">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                {post.category.name}
+              </span>
+            </div>
+          )}
+          
           <h3 className="text-xl font-semibold text-gray-900 mb-2 line-clamp-2">
             {post.title}
           </h3>
-          <p className="text-gray-600 mb-4 line-clamp-3">
+          <p className="text-gray-600 mb-4 line-clamp-3 flex-1">
             {post.excerpt}
           </p>
           <span className="text-blue-600 hover:text-blue-800 font-medium">
