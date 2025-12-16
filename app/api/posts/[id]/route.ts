@@ -71,6 +71,17 @@ export async function PUT(
     const body = await request.json();
     let { title, slug, content_lexical, excerpt, featured_image_url, published_at, category_id } = body;
 
+    // Check for reserved slugs if slug is being updated
+    if (slug) {
+      const reservedSlugs = ['admin', 'api', 'category', 'posts', 'styles'];
+      if (reservedSlugs.includes(slug)) {
+        return NextResponse.json(
+          { error: 'This slug is reserved and cannot be used' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Validate category if provided
     if (category_id) {
       const { data: category, error: categoryError } = await supabase

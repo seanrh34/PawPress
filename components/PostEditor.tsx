@@ -273,7 +273,7 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
               placeholder="post-url-slug"
             />
             <p className="form-hint">
-              URL: /posts/{slug || 'your-post-slug'}
+              URL: /{slug || 'your-post-slug'}
             </p>
           </div>
 

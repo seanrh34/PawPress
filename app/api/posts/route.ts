@@ -68,6 +68,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check for reserved slugs
+    const reservedSlugs = ['admin', 'api', 'category', 'posts', 'styles'];
+    if (reservedSlugs.includes(slug)) {
+      return NextResponse.json(
+        { error: 'This slug is reserved and cannot be used' },
+        { status: 400 }
+      );
+    }
+
     // Validate category_id is provided
     if (!category_id) {
       return NextResponse.json(

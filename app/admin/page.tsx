@@ -226,7 +226,7 @@ export default function AdminDashboard() {
                         <div className="flex gap-2 items-center">
                           {post.published_at ? (
                             <Link
-                              href={`/posts/${post.slug}`}
+                              href={`/${post.slug}`}
                               className="text-blue-600 hover:text-blue-800 text-sm"
                             >
                               View
