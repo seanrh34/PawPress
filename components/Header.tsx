@@ -64,6 +64,12 @@ export default function Header() {
               Posts
             </Link>
             <Link 
+              href="/category"
+              className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+            >
+              Categories
+            </Link>
+            <Link 
               href="/#pawpress"
               onClick={(e) => handleLinkClick(e, '/#pawpress')}
               className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
@@ -114,6 +120,13 @@ export default function Header() {
                 className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
               >
                 Posts
+              </Link>
+              <Link 
+                href="/category"
+                onClick={() => setIsOpen(false)}
+                className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                Categories
               </Link>
               <Link 
                 href="/#pawpress"

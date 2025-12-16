@@ -61,6 +61,14 @@ export default function Footer() {
               </li>
               <li>
                 <Link 
+                  href="/category"
+                  className="hover:text-white transition-colors"
+                >
+                  Categories
+                </Link>
+              </li>
+              <li>
+                <Link 
                   href="/#pawpress"
                   onClick={(e) => handleLinkClick(e, '/#pawpress')}
                   className="hover:text-white transition-colors"
