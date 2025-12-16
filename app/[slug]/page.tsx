@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
+import { Metadata } from 'next';
 import { Post, Category } from '@/lib/types';
 
 // Reserved slugs that should not match post routes
@@ -47,6 +48,27 @@ async function getPost(slug: string): Promise<Post | null> {
     console.error('Error fetching post:', error);
     return null;
   }
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const post = await getPost(slug);
+
+  if (!post) {
+    return {
+      title: 'Post Not Found',
+    };
+  }
+
+  return {
+    title: `${post.title} | PawPress`,
+    description: post.excerpt || 'Read this post on PawPress',
+    openGraph: {
+      title: post.title,
+      description: post.excerpt || '',
+      images: post.featured_image_url ? [post.featured_image_url] : [],
+    },
+  };
 }
 
 export default async function PostPage({ params }: { params: Promise<{ slug: string }> }) {

@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { Metadata } from 'next';
 import PostCard from '@/components/PostCard';
 import { Category, Post } from '@/lib/types';
 
@@ -43,6 +44,22 @@ async function getCategoryPosts(categoryId: string): Promise<Post[]> {
     console.error('Error fetching posts:', error);
     return [];
   }
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const category = await getCategory(slug);
+
+  if (!category) {
+    return {
+      title: 'Category Not Found',
+    };
+  }
+
+  return {
+    title: `${category.name} | PawPress`,
+    description: category.description || `Browse all posts in the ${category.name} category.`,
+  };
 }
 
 export default async function CategoryPage({ params }: { params: Promise<{ slug: string }> }) {

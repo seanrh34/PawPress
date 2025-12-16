@@ -1,5 +1,11 @@
 import Link from 'next/link';
+import { Metadata } from 'next';
 import { Category } from '@/lib/types';
+
+export const metadata: Metadata = {
+  title: 'Categories | PawPress',
+  description: 'Browse posts by category to find content that interests you.',
+};
 
 async function getAllCategories(): Promise<Category[]> {
   try {

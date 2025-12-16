@@ -168,6 +168,13 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
       return;
     }
 
+    // Check for reserved slugs
+    const reservedSlugs = ['admin', 'api', 'category', 'posts', 'styles'];
+    if (reservedSlugs.includes(slug.toLowerCase())) {
+      alert(`The slug "${slug}" is reserved and cannot be used. Please choose a different slug.`);
+      return;
+    }
+
     if (!categoryId) {
       alert('Please select a category');
       return;
@@ -227,7 +234,8 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
       router.refresh();
     } catch (error) {
       console.error(`Error ${mode}ing post:`, error);
-      alert(`Failed to ${mode} post. Please try again.`);
+      const errorMessage = error instanceof Error ? error.message : `Failed to ${mode} post. Please try again.`;
+      alert(errorMessage);
     } finally {
       setIsSaving(false);
     }
@@ -272,6 +280,11 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
               className="form-input"
               placeholder="post-url-slug"
             />
+            {['admin', 'api', 'category', 'posts', 'styles'].includes(slug.toLowerCase()) && (
+              <p className="text-red-600 text-sm mt-1">
+                ⚠️ This slug is reserved and cannot be used
+              </p>
+            )}
             <p className="form-hint">
               URL: /{slug || 'your-post-slug'}
             </p>
