@@ -116,9 +116,16 @@ export async function POST(request: NextRequest) {
     if (content_lexical) {
       try {
         content_html = await lexicalToHtml(content_lexical);
+        console.log('HTML conversion successful, length:', content_html.length);
       } catch (error) {
         console.error('Error converting Lexical to HTML:', error);
-        // Continue with empty HTML rather than failing the request
+        console.error('Error details:', error instanceof Error ? error.message : 'Unknown error');
+        console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+        // Return error instead of continuing with empty HTML
+        return NextResponse.json(
+          { error: 'Failed to convert content to HTML. Please try again.' },
+          { status: 500 }
+        );
       }
     }
 

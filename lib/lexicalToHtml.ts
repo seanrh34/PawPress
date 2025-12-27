@@ -31,8 +31,11 @@ async function initializeJsdom() {
  */
 export async function lexicalToHtml(editorState: SerializedEditorState): Promise<string> {
   try {
+    console.log('Starting HTML conversion...');
+    
     // Initialize jsdom if not already done
     await initializeJsdom();
+    console.log('jsdom initialized');
     
     // Create a headless editor
     const editor = createHeadlessEditor({
@@ -57,6 +60,8 @@ export async function lexicalToHtml(editorState: SerializedEditorState): Promise
       },
     });
 
+    console.log('Editor created');
+    
     let html = '';
 
     // Parse the editor state and generate HTML
@@ -65,10 +70,11 @@ export async function lexicalToHtml(editorState: SerializedEditorState): Promise
       html = $generateHtmlFromNodes(editor);
     });
 
-    console.log(html);
+    console.log('HTML generated, length:', html.length);
     return html;
   } catch (error) {
     console.error('Failed to convert Lexical to HTML:', error);
+    console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
     throw error;
   }
 }
