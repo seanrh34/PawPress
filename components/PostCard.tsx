@@ -11,13 +11,13 @@ export default function PostCard({ post }: PostCardProps) {
     <Link href={`/${post.slug}`}>
       <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow h-full flex flex-col">
         {/* Featured Image */}
-        <div className="h-48 bg-gray-200 relative">
+        <div className="h-64 bg-gray-200 relative overflow-hidden">
           {post.featured_image_url ? (
             <Image
               src={post.featured_image_url}
               alt={post.title}
               fill
-              className="w-full h-full object-cover"
+              className="object-cover"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-400">
