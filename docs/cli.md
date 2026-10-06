@@ -122,7 +122,11 @@ different `slug`.
 - Reference local images with **relative** paths: `![Diagram](./img/diagram.png)` or
   `featured_image: ./cover.jpg`. On push/create the CLI uploads them (`media:upload`) and rewrites the
   references to the uploaded URLs. Use `--write-back` to also save those URLs into your file.
-- Allowed: png, jpeg, webp, gif, avif; max 4 MB each.
+- Allowed: png, jpeg, webp, gif, avif; max 4 MB each. The file is checked locally before it is read
+  (over-size → exit 6).
+- The resolved path must stay inside the Markdown file's own directory. Pass `--allow-outside-dir` on
+  push/create/update to upload a file outside it deliberately. Symbolic links are always rejected
+  (exit 2).
 - Remote `https://…` image URLs and site paths (`/…`) are kept as-is; the server never downloads
   them. `data:` URIs are rejected.
 
@@ -141,10 +145,10 @@ pawpress auth status | logout
 pawpress posts list [--status draft|published|all] [--category <slug>] [--search <q>] [--limit N] [--offset N]
 pawpress posts get <id|slug> [--format markdown|lexical|html] [-o file]
 pawpress posts pull <id|slug> [-o file.md]
-pawpress posts push <file.md> [--publish] [--dry-run] [--force] [--write-back]
-pawpress posts create --title T --category C [--slug S] [--excerpt E] (--file f.md | --stdin) [--publish] [--dry-run]
+pawpress posts push <file.md> [--publish] [--dry-run] [--force] [--write-back] [--allow-outside-dir]
+pawpress posts create --title T --category C [--slug S] [--excerpt E] (--file f.md | --stdin) [--publish] [--dry-run] [--allow-outside-dir]
 pawpress posts update <id> [--title T] [--slug S] [--excerpt E] [--category C] [--featured-image URL]
-                           [--file f.md | --stdin] [--if-updated-at ts] [--dry-run]
+                           [--file f.md | --stdin] [--if-updated-at ts] [--dry-run] [--allow-outside-dir]
 pawpress posts publish <id> | unpublish <id>
 pawpress posts delete <id> --yes [--dry-run]
 pawpress categories list

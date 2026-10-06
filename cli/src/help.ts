@@ -67,23 +67,33 @@ Creates a post when the front matter has no id, otherwise updates it.
   --dry-run      Show the request without sending it
   --force        Skip the updated_at concurrency check on update
   --write-back   Rewrite the file with the returned id/updated_at and image URLs
+  --allow-outside-dir  Allow local images outside the markdown file's directory
 
 Update sends "status" only when --publish is given or the front matter has a
 status field. Without --write-back the local updated_at becomes stale.
 
 Only relative image paths (e.g. img/x.png, ./x.png) are uploaded; site-relative
-(/...) and remote (http/data) references are left untouched.`,
+(/...) and remote (http/data) references are left untouched. Uploaded files must
+be regular (non-symlink) files under the markdown file's directory and at most
+4 MB; pass --allow-outside-dir to permit paths that escape that directory.`,
   'posts create': `Usage: pawpress posts create --title T --category C [--slug S] [--excerpt E]
                                   (--file f.md | --stdin) [--publish] [--dry-run]
+                                  [--allow-outside-dir]
 
 Only relative image paths (e.g. img/x.png, ./x.png) are uploaded; site-relative
-(/...) and remote (http/data) references are left untouched.`,
+(/...) and remote (http/data) references are left untouched. Uploaded files must
+be regular (non-symlink) files under the markdown file's directory and at most
+4 MB; pass --allow-outside-dir to permit paths that escape that directory.`,
   'posts update': `Usage: pawpress posts update <id> [options]
 
   --title T, --slug S, --excerpt E, --category C, --featured-image URL
   --file f.md | --stdin        Replace the content
   --if-updated-at <ts>         Optimistic concurrency check
-  --dry-run                    Show the request without sending it`,
+  --dry-run                    Show the request without sending it
+  --allow-outside-dir          Allow local images outside the markdown file's directory
+
+Uploaded images must be regular (non-symlink) files under the markdown file's
+directory and at most 4 MB unless --allow-outside-dir is passed.`,
   'posts publish': `Usage: pawpress posts publish <id>`,
   'posts unpublish': `Usage: pawpress posts unpublish <id>`,
   'posts delete': `Usage: pawpress posts delete <id> --yes [--dry-run]
@@ -100,6 +110,7 @@ Requires --yes (there is no interactive prompt).`,
   'media upload': `Usage: pawpress media upload <path>
 
 Uploads an image (png, jpg, jpeg, webp, gif, avif) and prints its URL.
+The file must be a regular (non-symlink) file of at most 4 MB.
 JSON mode prints the full API response.`,
 };
 

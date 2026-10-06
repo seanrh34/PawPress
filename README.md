@@ -335,6 +335,10 @@ pawpress posts pull my-post -o my-post.md
 pawpress posts push my-post.md --write-back
 ```
 
+Local images referenced from a post are uploaded automatically; they must be non-symlink regular
+files under the post's own directory and at most 4 MB. Pass `--allow-outside-dir` to
+`push`/`create`/`update` to allow a path outside it.
+
 See [`docs/cli.md`](docs/cli.md) for the setup guide, agent instructions, and exit codes.
 
 ## Deployment

@@ -1,7 +1,8 @@
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseFrontMatter } from '../src/frontmatter';
+import { MAX_IMAGE_BYTES } from '../src/images';
 import { makeFetch, makeHarness, makeTempDir, response, writeTempFile } from './helpers';
 import type { FetchInit } from '../src/http';
 
@@ -238,6 +239,75 @@ describe('posts push local images', () => {
     const harness = makeFetch(() => response(201, serverPost()));
     const h = makeHarness({ env: ENV, cwd: dir, fetch: harness.fetch });
     expect(await h.run(['posts', 'push', file])).toBe(2);
+    expect(harness.calls).toHaveLength(0);
+  });
+
+  it('rejects an image outside the markdown directory by default', async () => {
+    const dir = await makeTempDir();
+    const sub = join(dir, 'sub');
+    await mkdir(sub, { recursive: true });
+    await writeTempFile(dir, 'outside.png', 'PNGDATA');
+    const file = await writeTempFile(
+      sub,
+      'post.md',
+      '---\ntitle: X\ncategory: news\n---\n![a](../outside.png)',
+    );
+    const harness = makeFetch(() => response(201, serverPost()));
+    const h = makeHarness({ env: ENV, cwd: dir, fetch: harness.fetch });
+    expect(await h.run(['posts', 'push', file])).toBe(2);
+    expect(h.stderrText()).toMatch(/allow-outside-dir/);
+    expect(harness.calls).toHaveLength(0);
+  });
+
+  it('uploads an outside image with --allow-outside-dir', async () => {
+    const dir = await makeTempDir();
+    const sub = join(dir, 'sub');
+    await mkdir(sub, { recursive: true });
+    await writeTempFile(dir, 'outside.png', 'PNGDATA');
+    const file = await writeTempFile(
+      sub,
+      'post.md',
+      '---\ntitle: X\ncategory: news\n---\n![a](../outside.png)',
+    );
+    const harness = makeFetch((url) => {
+      if (url.includes('/api/v1/media')) {
+        return response(201, { url: 'https://cdn.example/o.png', content_type: 'image/png', size: 7 });
+      }
+      return response(201, serverPost());
+    });
+    const h = makeHarness({ env: ENV, cwd: dir, fetch: harness.fetch });
+    expect(await h.run(['posts', 'push', file, '--allow-outside-dir', '--json'])).toBe(0);
+    expect(harness.calls.some((call) => call.url.includes('/api/v1/media'))).toBe(true);
+  });
+
+  it('rejects a symlinked image', async () => {
+    const dir = await makeTempDir();
+    await imageIn(dir, 'real.png');
+    await symlink(join(dir, 'real.png'), join(dir, 'link.png'));
+    const file = await writeTempFile(
+      dir,
+      'post.md',
+      '---\ntitle: X\ncategory: news\n---\n![a](link.png)',
+    );
+    const harness = makeFetch(() => response(201, serverPost()));
+    const h = makeHarness({ env: ENV, cwd: dir, fetch: harness.fetch });
+    expect(await h.run(['posts', 'push', file])).toBe(2);
+    expect(h.stderrText()).toMatch(/symbolic link/);
+    expect(harness.calls).toHaveLength(0);
+  });
+
+  it('rejects an image over 4 MB with exit 6 before any request', async () => {
+    const dir = await makeTempDir();
+    await writeFile(join(dir, 'big.png'), Buffer.alloc(MAX_IMAGE_BYTES + 1));
+    const file = await writeTempFile(
+      dir,
+      'post.md',
+      '---\ntitle: X\ncategory: news\n---\n![a](big.png)',
+    );
+    const harness = makeFetch(() => response(201, serverPost()));
+    const h = makeHarness({ env: ENV, cwd: dir, fetch: harness.fetch });
+    expect(await h.run(['posts', 'push', file])).toBe(6);
+    expect(h.stderrText()).toMatch(/too large/);
     expect(harness.calls).toHaveLength(0);
   });
 });
