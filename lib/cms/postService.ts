@@ -69,6 +69,12 @@ export interface UpdatePostPatch {
 
 export interface UpdatePostOptions {
   ifUpdatedAt?: string;
+  /**
+   * When true, a Lexical -> HTML conversion failure aborts the update with a
+   * 500 instead of leaving the previously stored HTML in place. The v1 API
+   * sets this; the web editor's PUT keeps the tolerant default.
+   */
+  strictHtml?: boolean;
 }
 
 const titleSchema = z
@@ -351,6 +357,11 @@ export async function updatePost(
         update.content_html = await lexicalToHtml(content);
       } catch (error) {
         console.error('Failed to convert content to HTML:', error);
+        if (opts.strictHtml) {
+          throw ApiError.internal(
+            'Failed to convert content to HTML. Please try again.',
+          );
+        }
         // Leave content_html untouched rather than failing the update; this
         // matches the web PUT contract.
       }

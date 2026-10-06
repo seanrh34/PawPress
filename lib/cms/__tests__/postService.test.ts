@@ -339,6 +339,29 @@ describe('updatePost', () => {
       updatePost(db.client, UUID, { title: 'New' }),
     ).rejects.toMatchObject({ code: 'not_found' });
   });
+
+  it('fails with internal and writes nothing when strictHtml conversion fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    lexicalToHtmlMock.mockRejectedValue(new Error('bad content'));
+
+    const db = makeDb({
+      posts: [
+        { data: { ...post, updated_at: T1 } },
+        { data: post },
+      ],
+    });
+
+    const error = await updatePost(
+      db.client,
+      UUID,
+      { content_lexical: lexicalState },
+      { strictHtml: true },
+    ).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).code).toBe('internal');
+    expect(db.callsFor('posts', 'update')).toHaveLength(0);
+  });
 });
 
 describe('publishPost', () => {

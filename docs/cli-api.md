@@ -162,7 +162,8 @@ Body: any of `title`, `slug`, `excerpt`, `category`, `featured_image_url`, `cont
 
 - `if_updated_at`: if present and not equal to the stored `updated_at`, respond `409 conflict` with
   `details: { "current_updated_at": "…" }` and change nothing.
-- Content HTML is regenerated **only** when content is provided.
+- Content HTML is regenerated **only** when content is provided; if regeneration fails the request
+  returns `500 internal` and nothing is written (the web editor's PUT keeps the old HTML instead).
 - `status: "published"` on a draft sets `published_at` to now; `status: "draft"` clears it.
 - The server always bumps `updated_at`.
 
