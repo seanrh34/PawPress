@@ -111,8 +111,10 @@ const IMAGE: TextMatchTransformer = {
     }
     return `![${node.__altText}](${node.__src})`;
   },
-  importRegExp: /!\[([^\]]*)\]\(([^)\s]+)\)/,
-  regExp: /!\[([^\]]*)\]\(([^)\s]+)\)$/,
+  // Quantifiers are bounded so a pathological run of `![` cannot trigger
+  // super-linear backtracking (the old `[^\]]*` was O(n^2)).
+  importRegExp: /!\[([^\]\n]{0,1000})\]\(([^)\s]{1,2048})\)/,
+  regExp: /!\[([^\]\n]{0,1000})\]\(([^)\s]{1,2048})\)$/,
   replace: (textNode, match) => {
     const [, altText, src] = match;
     if (!src) {
@@ -125,6 +127,23 @@ const IMAGE: TextMatchTransformer = {
 };
 
 const YOUTUBE_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
+
+/**
+ * The bundled LINK transformer's regex uses an unbounded lazy `(.+?)`, which
+ * backtracks quadratically on hostile input such as `'['.repeat(100_000)`
+ * (measured ~5 s at 100k characters). Re-declare it with bounded quantifiers
+ * while reusing Lexical's own `export`/`replace` logic unchanged; only the
+ * regex is replaced. Link text longer than 1000 chars or a URL longer than 2048
+ * is not imported as a link, which is well above any real link and matches the
+ * caps used for images.
+ */
+const SAFE_LINK: TextMatchTransformer = {
+  ...LINK,
+  importRegExp:
+    /\[([^\n]{1,1000}?)\]\((?:([^()\s]{1,2048})(?:\s"((?:[^"]*\\")*[^"]*)"\s*)?)\)/,
+  regExp:
+    /\[([^\n]{1,1000}?)\]\((?:([^()\s]{1,2048})(?:\s"((?:[^"]*\\")*[^"]*)"\s*)?)\)$/,
+};
 
 /**
  * A paragraph consisting solely of a YouTube URL in any of the common shapes:
@@ -285,7 +304,7 @@ const MARKDOWN_TRANSFORMERS: Transformer[] = [
   // `[alt](src)` tail, and the first transformer with the earliest match wins.
   IMAGE,
   YOUTUBE,
-  LINK,
+  SAFE_LINK,
 ];
 
 const LIST_MARKER_REG_EXP = /^([ \t]*)([-*+]|\d{1,}\.)([ \t]+)/;
@@ -365,7 +384,105 @@ function createEditor(): LexicalEditor {
   });
 }
 
+/**
+ * Maximum characters in a single top-level text block (a run of consecutive
+ * non-blank lines) outside fenced code blocks. Lexical's text-format importer
+ * is quadratic in the size of one block, so this bounds the worst case per
+ * request. See `findOversizedMarkdownBlock`.
+ */
+export const MAX_MARKDOWN_BLOCK_CHARS = 10_000;
+
+export class MarkdownBlockTooLongError extends Error {
+  readonly length: number;
+
+  constructor(length: number) {
+    super(`a paragraph exceeds ${MAX_MARKDOWN_BLOCK_CHARS} characters`);
+    this.name = 'MarkdownBlockTooLongError';
+    this.length = length;
+  }
+}
+
+interface FenceMatch {
+  char: string;
+  length: number;
+  selfClosed: boolean;
+}
+
+function matchFence(line: string): FenceMatch | null {
+  const match = /^[ \t]*(`{3,}|~{3,})(.*)$/.exec(line);
+  if (!match) {
+    return null;
+  }
+  const marker = match[1];
+  const rest = match[2];
+  const char = marker[0];
+  const length = marker.length;
+  // A single-line fence such as ```code``` does not open a block.
+  const closing = new RegExp('^.*?' + char + '{' + length + ',}[ \\t]*$');
+  return { char, length, selfClosed: rest !== '' && closing.test(rest) };
+}
+
+/**
+ * Returns the length of the first top-level text block longer than `limit`, or
+ * null when every block is within the limit. Fenced code blocks (```/~~~) are
+ * exempt; they are still bounded by the overall `content_markdown` limit.
+ */
+export function findOversizedMarkdownBlock(
+  markdown: string,
+  limit: number = MAX_MARKDOWN_BLOCK_CHARS,
+): number | null {
+  const lines = markdown.split('\n');
+  let fence: FenceMatch | null = null;
+  let blockLength = 0;
+
+  for (const line of lines) {
+    if (fence) {
+      const close = /^[ \t]*(`{3,}|~{3,})[ \t]*$/.exec(line);
+      if (
+        close &&
+        close[1][0] === fence.char &&
+        close[1].length >= fence.length
+      ) {
+        fence = null;
+      }
+      continue;
+    }
+
+    const candidate = matchFence(line);
+    if (candidate) {
+      if (blockLength > limit) {
+        return blockLength;
+      }
+      blockLength = 0;
+      if (!candidate.selfClosed) {
+        fence = candidate;
+      }
+      continue;
+    }
+
+    if (line.trim() === '') {
+      if (blockLength > limit) {
+        return blockLength;
+      }
+      blockLength = 0;
+      continue;
+    }
+
+    if (blockLength > 0) {
+      blockLength += 1;
+    }
+    blockLength += line.length;
+  }
+
+  return blockLength > limit ? blockLength : null;
+}
+
 export function markdownToLexical(markdown: string): SerializedEditorState {
+  const oversized = findOversizedMarkdownBlock(markdown);
+  if (oversized !== null) {
+    throw new MarkdownBlockTooLongError(oversized);
+  }
+
   const normalized = normalizeListIndentation(markdown);
   const editor = createEditor();
   editor.update(
@@ -383,6 +500,56 @@ export function lexicalToMarkdown(state: SerializedEditorState): string {
   return editor
     .getEditorState()
     .read(() => $convertToMarkdownString(MARKDOWN_TRANSFORMERS));
+}
+
+export interface DisallowedNodeType {
+  path: string;
+  type: string;
+}
+
+/**
+ * Walks a candidate editor state and reports every node whose `type` is not one
+ * of the editor's registered nodes. Used to reject hostile v1 `content_lexical`
+ * with a precise error before it is parsed.
+ */
+export function findDisallowedNodeTypes(state: unknown): DisallowedNodeType[] {
+  const out: DisallowedNodeType[] = [];
+
+  const walk = (node: unknown, path: string): void => {
+    if (typeof node !== 'object' || node === null) {
+      return;
+    }
+    const record = node as Record<string, unknown>;
+    const type = record.type;
+    if (typeof type !== 'string' || !ALLOWED_NODE_TYPES.has(type)) {
+      out.push({ path, type: typeof type === 'string' ? type : '(missing)' });
+    }
+    if (Array.isArray(record.children)) {
+      record.children.forEach((child, index) => {
+        walk(child, `${path}.children[${index}]`);
+      });
+    }
+  };
+
+  if (typeof state === 'object' && state !== null) {
+    walk((state as Record<string, unknown>).root, 'root');
+  }
+
+  return out;
+}
+
+/**
+ * Round-trips a serialized editor state through a fresh headless editor using
+ * the same node list as the Markdown importer/exporter. Unknown fields are
+ * dropped and every node is re-serialized by its own `exportJSON()`, giving a
+ * canonical, editor-shaped state. Throws if the state cannot be parsed.
+ */
+export function normalizeLexicalState(
+  state: SerializedEditorState,
+): SerializedEditorState {
+  const editor = createEditor();
+  editor.setEditorState(editor.parseEditorState(state));
+  return editor.getEditorState().toJSON();
 }
 
 /**

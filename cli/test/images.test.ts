@@ -1,9 +1,12 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  assertLocalImageFile,
   assertLocalImagesExist,
+  imageRefForPath,
   isLocalImagePath,
+  MAX_IMAGE_BYTES,
   rewriteMarkdownImages,
   scanLocalImages,
   uniqueByAbsolutePath,
@@ -88,6 +91,77 @@ describe('assertLocalImagesExist', () => {
     await makeImage(dir, 'img/a.png');
     const refs = scanLocalImages('![a](img/a.png)', null, dir);
     await expect(assertLocalImagesExist(refs)).resolves.toBeUndefined();
+  });
+});
+
+describe('assertLocalImagesExist path safety', () => {
+  it('rejects a path that escapes the content directory', async () => {
+    const dir = await makeTempDir();
+    const sub = join(dir, 'sub');
+    await mkdir(sub, { recursive: true });
+    await writeTempFile(dir, 'outside.png', 'x');
+    const refs = scanLocalImages('![a](../outside.png)', null, sub);
+    await expect(assertLocalImagesExist(refs)).rejects.toMatchObject({
+      exitCode: 2,
+    });
+  });
+
+  it('allows an escaping path with allowOutsideDir', async () => {
+    const dir = await makeTempDir();
+    const sub = join(dir, 'sub');
+    await mkdir(sub, { recursive: true });
+    await writeTempFile(dir, 'outside.png', 'x');
+    const refs = scanLocalImages('![a](../outside.png)', null, sub);
+    await expect(
+      assertLocalImagesExist(refs, { allowOutsideDir: true }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('rejects a symlinked image', async () => {
+    const dir = await makeTempDir();
+    await writeTempFile(dir, 'real.png', 'x');
+    await symlink(join(dir, 'real.png'), join(dir, 'link.png'));
+    const refs = scanLocalImages('![a](link.png)', null, dir);
+    await expect(assertLocalImagesExist(refs)).rejects.toThrowError(
+      /symbolic link/,
+    );
+  });
+
+  it('rejects a file over the 4 MB limit with exit 6', async () => {
+    const dir = await makeTempDir();
+    await writeFile(join(dir, 'big.png'), Buffer.alloc(MAX_IMAGE_BYTES + 1));
+    const refs = scanLocalImages('![a](big.png)', null, dir);
+    const error = await assertLocalImagesExist(refs).catch(
+      (caught: unknown) => caught,
+    );
+    expect(error).toMatchObject({ exitCode: 6, code: 'validation_failed' });
+    expect((error as Error).message).toMatch(/too large/);
+  });
+
+  it('accepts a file exactly at the limit', async () => {
+    const dir = await makeTempDir();
+    await writeFile(join(dir, 'exact.png'), Buffer.alloc(MAX_IMAGE_BYTES));
+    const refs = scanLocalImages('![a](exact.png)', null, dir);
+    await expect(assertLocalImagesExist(refs)).resolves.toBeUndefined();
+  });
+
+  it('rejects a symlink through assertLocalImageFile directly', async () => {
+    const dir = await makeTempDir();
+    await writeTempFile(dir, 'real.png', 'x');
+    await symlink(join(dir, 'real.png'), join(dir, 'link.png'));
+    await expect(
+      assertLocalImageFile(imageRefForPath(join(dir, 'link.png'))),
+    ).rejects.toThrowError(/symbolic link/);
+  });
+});
+
+describe('scanLocalImages performance', () => {
+  it('handles a hostile run of image markers quickly', () => {
+    const input = '!['.repeat(100_000);
+    const start = performance.now();
+    scanLocalImages(input, null, '/tmp/base');
+    const duration = performance.now() - start;
+    expect(duration).toBeLessThan(2000);
   });
 });
 

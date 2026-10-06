@@ -205,3 +205,55 @@ const answer = 42;
 ![A cat](https://example.com/cat.png)
 
 https://www.youtube.com/watch?v=dQw4w9WgXcQ`;
+
+/**
+ * Synthetic shape of real web-editor output when the link toolbar is left on
+ * its default: the `url` is the scheme-only placeholder "https://". It links
+ * nowhere but must not be rejected by the v1 content checks.
+ */
+export const editorPlaceholderLinkState = {
+  root: {
+    children: [
+      {
+        children: [
+          {
+            children: [
+              {
+                detail: 0,
+                format: 0,
+                mode: 'normal',
+                style: '',
+                text: 'the docs',
+                type: 'text',
+                version: 1,
+              },
+            ],
+            direction: 'ltr',
+            format: '',
+            indent: 0,
+            type: 'link',
+            version: 1,
+            rel: null,
+            target: null,
+            title: null,
+            url: 'https://',
+          },
+        ],
+        direction: null,
+        format: '',
+        indent: 0,
+        type: 'paragraph',
+        version: 1,
+        textFormat: 0,
+        textStyle: '',
+      },
+    ],
+    direction: null,
+    format: '',
+    indent: 0,
+    type: 'root',
+    version: 1,
+  },
+} as unknown as SerializedEditorState;
+
+export const editorPlaceholderLinkMarkdown = '[the docs](https://)';

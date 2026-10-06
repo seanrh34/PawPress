@@ -85,6 +85,12 @@ export function isAllowedLinkUrl(url: string): boolean {
   if (hasUnsafeChars(trimmed)) {
     return false;
   }
+  // The web editor's link toolbar inserts a scheme-only placeholder
+  // ("https://" / "http://") when the user does not edit it. It links nowhere;
+  // accept it exactly, without loosening any other URL rule.
+  if (/^https?:\/\/$/i.test(trimmed)) {
+    return true;
+  }
   if (trimmed.startsWith('#')) {
     return trimmed.length > 1;
   }

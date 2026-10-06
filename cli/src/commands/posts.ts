@@ -176,6 +176,7 @@ async function postsPush(ctx: Context, args: string[]): Promise<void> {
       'dry-run': { type: 'boolean' },
       force: { type: 'boolean' },
       'write-back': { type: 'boolean' },
+      'allow-outside-dir': { type: 'boolean' },
     },
     true,
   );
@@ -184,6 +185,7 @@ async function postsPush(ctx: Context, args: string[]): Promise<void> {
   const dryRun = optBool(values, 'dry-run');
   const force = optBool(values, 'force');
   const writeBack = optBool(values, 'write-back');
+  const allowOutsideDir = optBool(values, 'allow-outside-dir');
 
   const text = await readContentFile(file);
   const doc = parseFrontMatter(text);
@@ -210,6 +212,7 @@ async function postsPush(ctx: Context, args: string[]): Promise<void> {
     fields.featuredImage,
     baseDir,
     dryRun,
+    allowOutsideDir,
   );
 
   const body: Record<string, unknown> = isUpdate
@@ -260,6 +263,7 @@ async function postsCreate(ctx: Context, args: string[]): Promise<void> {
       stdin: { type: 'boolean' },
       publish: { type: 'boolean' },
       'dry-run': { type: 'boolean' },
+      'allow-outside-dir': { type: 'boolean' },
     },
     false,
   );
@@ -274,6 +278,7 @@ async function postsCreate(ctx: Context, args: string[]): Promise<void> {
   }
   const publish = optBool(values, 'publish');
   const dryRun = optBool(values, 'dry-run');
+  const allowOutsideDir = optBool(values, 'allow-outside-dir');
 
   const content = file ? await readContentFile(file) : await deps.stdin();
   const baseDir = baseDirForFile(file, deps.cwd);
@@ -283,6 +288,7 @@ async function postsCreate(ctx: Context, args: string[]): Promise<void> {
     null,
     baseDir,
     dryRun,
+    allowOutsideDir,
   );
   const body: Record<string, unknown> = {
     title,
@@ -319,6 +325,7 @@ async function postsUpdate(ctx: Context, args: string[]): Promise<void> {
       stdin: { type: 'boolean' },
       'if-updated-at': { type: 'string' },
       'dry-run': { type: 'boolean' },
+      'allow-outside-dir': { type: 'boolean' },
     },
     true,
   );
@@ -332,6 +339,7 @@ async function postsUpdate(ctx: Context, args: string[]): Promise<void> {
   const file = optString(values, 'file');
   const useStdin = optBool(values, 'stdin');
   const dryRun = optBool(values, 'dry-run');
+  const allowOutsideDir = optBool(values, 'allow-outside-dir');
   if (file && useStdin) throw usageError('posts update accepts at most one of --file or --stdin');
   const hasContent = Boolean(file) || useStdin;
 
@@ -363,6 +371,7 @@ async function postsUpdate(ctx: Context, args: string[]): Promise<void> {
       null,
       baseDir,
       dryRun,
+      allowOutsideDir,
     );
     body.content_markdown = prepared.markdown;
   }
@@ -432,10 +441,11 @@ async function prepareContent(
   featuredImage: string | null,
   baseDir: string,
   dryRun: boolean,
+  allowOutsideDir: boolean,
 ): Promise<Prepared> {
   const refs = scanLocalImages(markdown, featuredImage, baseDir);
   const unique = uniqueByAbsolutePath(refs);
-  await assertLocalImagesExist(unique);
+  await assertLocalImagesExist(unique, { allowOutsideDir });
   if (dryRun) {
     return { markdown, featuredImage, uploads: planUploads(unique) };
   }

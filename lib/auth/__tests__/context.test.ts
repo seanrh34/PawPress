@@ -36,6 +36,8 @@ function buildFake(options: {
   withUser?: boolean;
   withProfile?: boolean;
   tokens?: TokenMeta[];
+  bannedUntil?: string | null;
+  deletedAt?: string | null;
 }): FakeAdmin {
   const users = new Map();
   const profiles = new Map();
@@ -45,6 +47,8 @@ function buildFake(options: {
       id: USER_ID,
       email: EMAIL,
       app_metadata: { pawpress_tokens: options.tokens ?? [] },
+      banned_until: options.bannedUntil ?? null,
+      deleted_at: options.deletedAt ?? null,
     });
   }
 
@@ -162,6 +166,74 @@ describe('getTokenAuth', () => {
 
     await expect(callTokenAuth(fake, raw)).rejects.toMatchObject({
       code: 'unauthorized',
+    });
+  });
+
+  it('rejects a user banned in the future', async () => {
+    const fake = buildFake({
+      tokens: [tokenMeta()],
+      bannedUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    });
+    const raw = await mintToken({
+      userId: USER_ID,
+      tokenId: TOKEN_ID,
+      scopes: ['posts:read'],
+      expiresAt: EXPIRES_AT,
+    });
+
+    await expect(callTokenAuth(fake, raw)).rejects.toMatchObject({
+      code: 'unauthorized',
+    });
+  });
+
+  it('accepts a user whose ban has expired', async () => {
+    const fake = buildFake({
+      tokens: [tokenMeta()],
+      bannedUntil: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    });
+    const raw = await mintToken({
+      userId: USER_ID,
+      tokenId: TOKEN_ID,
+      scopes: ['posts:read'],
+      expiresAt: EXPIRES_AT,
+    });
+
+    const auth = await callTokenAuth(fake, raw);
+    expect(auth.via).toBe('token');
+  });
+
+  it('rejects a soft-deleted user', async () => {
+    const fake = buildFake({
+      tokens: [tokenMeta()],
+      deletedAt: new Date().toISOString(),
+    });
+    const raw = await mintToken({
+      userId: USER_ID,
+      tokenId: TOKEN_ID,
+      scopes: ['posts:read'],
+      expiresAt: EXPIRES_AT,
+    });
+
+    await expect(callTokenAuth(fake, raw)).rejects.toMatchObject({
+      code: 'unauthorized',
+    });
+  });
+
+  it('ignores null banned_until/deleted_at', async () => {
+    const fake = buildFake({
+      tokens: [tokenMeta()],
+      bannedUntil: null,
+      deletedAt: null,
+    });
+    const raw = await mintToken({
+      userId: USER_ID,
+      tokenId: TOKEN_ID,
+      scopes: ['posts:read'],
+      expiresAt: EXPIRES_AT,
+    });
+
+    await expect(callTokenAuth(fake, raw)).resolves.toMatchObject({
+      via: 'token',
     });
   });
 

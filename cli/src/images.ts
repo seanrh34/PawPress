@@ -1,6 +1,6 @@
-import { access } from 'node:fs/promises';
-import { extname, isAbsolute, resolve } from 'node:path';
-import { usageError } from './errors';
+import { lstat } from 'node:fs/promises';
+import { dirname, extname, isAbsolute, relative, resolve } from 'node:path';
+import { CliError, EXIT, usageError } from './errors';
 
 export type ImageKind = 'markdown' | 'featured';
 
@@ -8,8 +8,12 @@ export interface ImageRef {
   kind: ImageKind;
   original: string;
   absolutePath: string;
+  baseDir: string;
   mime?: string;
 }
+
+/** Server-enforced media limit; checked locally before reading the file. */
+export const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 
 const MIME_BY_EXT: Record<string, string> = {
   png: 'image/png',
@@ -37,7 +41,7 @@ export function isLocalImagePath(path: string): boolean {
 function makeRef(kind: ImageKind, original: string, baseDir: string): ImageRef {
   const path = stripAngles(original).trim();
   const absolutePath = isAbsolute(path) ? path : resolve(baseDir, path);
-  return { kind, original: path, absolutePath, mime: mimeForPath(path) };
+  return { kind, original: path, absolutePath, baseDir, mime: mimeForPath(path) };
 }
 
 export function scanLocalImages(
@@ -73,18 +77,82 @@ export function uniqueByAbsolutePath(refs: ImageRef[]): ImageRef[] {
   return unique;
 }
 
-export async function assertLocalImagesExist(refs: ImageRef[]): Promise<void> {
+/**
+ * Builds an {@link ImageRef} for a path given directly on the command line
+ * (e.g. `pawpress media upload`). The base directory is the file's own
+ * directory, so containment checks are only meaningful for markdown uploads.
+ */
+export function imageRefForPath(path: string): ImageRef {
+  const absolutePath = resolve(path);
+  return {
+    kind: 'markdown',
+    original: path,
+    absolutePath,
+    baseDir: dirname(absolutePath),
+    mime: mimeForPath(path),
+  };
+}
+
+export async function assertLocalImagesExist(
+  refs: ImageRef[],
+  options: { allowOutsideDir?: boolean } = {},
+): Promise<void> {
   for (const ref of refs) {
-    if (!ref.mime) {
+    if (!options.allowOutsideDir && escapesContentDir(ref)) {
       throw usageError(
-        `unsupported image type for ${ref.original} (allowed: png, jpg, jpeg, webp, gif, avif)`,
+        `image path is outside the content directory: ${ref.original} (pass --allow-outside-dir to allow this)`,
       );
     }
-    try {
-      await access(ref.absolutePath);
-    } catch {
-      throw usageError(`local image not found: ${ref.original}`);
-    }
+    await assertLocalImageFile(ref);
+  }
+}
+
+/**
+ * True when a resolved image path is not underneath the markdown file's
+ * directory. `path.relative` returns a `..`-prefixed or absolute value for
+ * anything outside the base.
+ */
+function escapesContentDir(ref: ImageRef): boolean {
+  const rel = relative(ref.baseDir, ref.absolutePath);
+  if (rel === '') {
+    return false;
+  }
+  return rel.startsWith('..') || isAbsolute(rel);
+}
+
+/**
+ * Checks a single local image without reading it: the MIME type must be
+ * supported, the path must be a regular file (not a symlink), and it must not
+ * exceed the server's 4 MB media limit.
+ */
+export async function assertLocalImageFile(ref: ImageRef): Promise<void> {
+  if (!ref.mime) {
+    throw usageError(
+      `unsupported image type for ${ref.original} (allowed: png, jpg, jpeg, webp, gif, avif)`,
+    );
+  }
+
+  let stats;
+  try {
+    stats = await lstat(ref.absolutePath);
+  } catch {
+    throw usageError(`local image not found: ${ref.original}`);
+  }
+
+  if (stats.isSymbolicLink()) {
+    throw usageError(`refusing to upload symbolic link: ${ref.original}`);
+  }
+
+  if (!stats.isFile()) {
+    throw usageError(`local image not found: ${ref.original}`);
+  }
+
+  if (stats.size > MAX_IMAGE_BYTES) {
+    throw new CliError(
+      `local image is too large: ${ref.original} (${stats.size} bytes; maximum ${MAX_IMAGE_BYTES})`,
+      EXIT.VALIDATION,
+      { code: 'validation_failed' },
+    );
   }
 }
 
@@ -131,5 +199,7 @@ export function mapOutsideFences(markdown: string, fn: (line: string) => string)
 }
 
 function imageRegex(): RegExp {
-  return /!\[([^\]]*)\]\(\s*(<[^>]*>|[^)\s]+)(\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/g;
+  // Quantifiers are bounded to avoid super-linear backtracking on hostile
+  // input; these limits are far above any real image reference.
+  return /!\[([^\]\n]{0,1000})\]\(\s*(<[^>\n]{1,2048}>|[^)\s]{1,2048})(\s+(?:"[^"\n]{0,1000}"|'[^'\n]{0,1000}'|\([^)\n]{0,1000}\)))?\s*\)/g;
 }

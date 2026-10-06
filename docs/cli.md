@@ -122,7 +122,11 @@ different `slug`.
 - Reference local images with **relative** paths: `![Diagram](./img/diagram.png)` or
   `featured_image: ./cover.jpg`. On push/create the CLI uploads them (`media:upload`) and rewrites the
   references to the uploaded URLs. Use `--write-back` to also save those URLs into your file.
-- Allowed: png, jpeg, webp, gif, avif; max 4 MB each.
+- Allowed: png, jpeg, webp, gif, avif; max 4 MB each. The file is checked locally before it is read
+  (over-size → exit 6).
+- The resolved path must stay inside the Markdown file's own directory. Pass `--allow-outside-dir` on
+  push/create/update to upload a file outside it deliberately. Symbolic links are always rejected
+  (exit 2).
 - Remote `https://…` image URLs and site paths (`/…`) are kept as-is; the server never downloads
   them. `data:` URIs are rejected.
 
@@ -133,6 +137,10 @@ only), ordered/unordered/nested lists, block quotes, fenced code blocks with a l
 tables, and YouTube embeds: put a YouTube URL alone on its own line. Raw HTML and horizontal rules
 aren't supported. Use `posts get <id> --format lexical` if you need the exact editor JSON.
 
+A single text block (a run of consecutive non-blank lines, i.e. one paragraph) must be at most
+10 000 characters. Fenced code blocks are exempt. Larger paragraphs are rejected with exit 6
+("a paragraph exceeds 10000 characters"), so split very long text with blank lines.
+
 ## 3. Command reference
 
 ```
@@ -141,10 +149,10 @@ pawpress auth status | logout
 pawpress posts list [--status draft|published|all] [--category <slug>] [--search <q>] [--limit N] [--offset N]
 pawpress posts get <id|slug> [--format markdown|lexical|html] [-o file]
 pawpress posts pull <id|slug> [-o file.md]
-pawpress posts push <file.md> [--publish] [--dry-run] [--force] [--write-back]
-pawpress posts create --title T --category C [--slug S] [--excerpt E] (--file f.md | --stdin) [--publish] [--dry-run]
+pawpress posts push <file.md> [--publish] [--dry-run] [--force] [--write-back] [--allow-outside-dir]
+pawpress posts create --title T --category C [--slug S] [--excerpt E] (--file f.md | --stdin) [--publish] [--dry-run] [--allow-outside-dir]
 pawpress posts update <id> [--title T] [--slug S] [--excerpt E] [--category C] [--featured-image URL]
-                           [--file f.md | --stdin] [--if-updated-at ts] [--dry-run]
+                           [--file f.md | --stdin] [--if-updated-at ts] [--dry-run] [--allow-outside-dir]
 pawpress posts publish <id> | unpublish <id>
 pawpress posts delete <id> --yes [--dry-run]
 pawpress categories list

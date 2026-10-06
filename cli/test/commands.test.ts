@@ -1,7 +1,9 @@
-import { stat } from 'node:fs/promises';
+import { stat, symlink, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { configFilePath, readConfigFile } from '../src/config';
-import { makeFetch, makeHarness, makeTempDir, response } from './helpers';
+import { MAX_IMAGE_BYTES } from '../src/images';
+import { makeFetch, makeHarness, makeTempDir, response, writeTempFile } from './helpers';
 
 const ENV = { PAWPRESS_URL: 'https://site.example', PAWPRESS_TOKEN: 'pp_test_token' };
 const POST_ID = '11111111-1111-1111-1111-111111111111';
@@ -99,6 +101,28 @@ describe('media upload', () => {
     const harness = makeFetch(() => response(201, { url: 'https://cdn/x' }));
     const h = makeHarness({ env: ENV, fetch: harness.fetch });
     expect(await h.run(['media', 'upload', path])).toBe(2);
+    expect(harness.calls).toHaveLength(0);
+  });
+
+  it('rejects a symlinked file before any request', async () => {
+    const dir = await makeTempDir();
+    await writeTempFile(dir, 'real.png', 'PNGDATA');
+    await symlink(join(dir, 'real.png'), join(dir, 'link.png'));
+    const harness = makeFetch(() => response(201, { url: 'https://cdn/x' }));
+    const h = makeHarness({ env: ENV, fetch: harness.fetch });
+    expect(await h.run(['media', 'upload', join(dir, 'link.png')])).toBe(2);
+    expect(h.stderrText()).toMatch(/symbolic link/);
+    expect(harness.calls).toHaveLength(0);
+  });
+
+  it('rejects a file over 4 MB before any request', async () => {
+    const dir = await makeTempDir();
+    const path = join(dir, 'big.png');
+    await writeFile(path, Buffer.alloc(MAX_IMAGE_BYTES + 1));
+    const harness = makeFetch(() => response(201, { url: 'https://cdn/x' }));
+    const h = makeHarness({ env: ENV, fetch: harness.fetch });
+    expect(await h.run(['media', 'upload', path])).toBe(6);
+    expect(h.stderrText()).toMatch(/too large/);
     expect(harness.calls).toHaveLength(0);
   });
 });

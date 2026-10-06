@@ -101,6 +101,7 @@ export const PATCH = withApi<{ id: string }>(
     // so a post published concurrently can't be edited with only posts:write.
     const updated = await updatePost(ctx.auth.db, id, patch, {
       ifUpdatedAt: body.if_updated_at ?? current.updated_at,
+      strictHtml: true,
     });
     const post = await ensurePostCategory(ctx.auth.db, updated);
     audit(ctx, 'post.update', 'post', post.id);

@@ -22,9 +22,10 @@ var `PAWPRESS_TOKEN_SECRET`). Claims: `iss: "pawpress"`, `sub` (user id), `jti` 
 `scp` (scopes), `iat`, `exp`. Clients must treat the token as opaque.
 
 A token is accepted only if **all** of these hold: the signature is valid, `iss` is correct, it hasn't
-expired, its `jti` is still in the owner's active-token list (not revoked), and the owner still has a
-`user_profiles` row with role `master` or `admin`. Any failure returns `401 unauthorized` with no
-detail about which check failed.
+expired, its `jti` is still in the owner's active-token list (not revoked), the owner is not banned
+(`banned_until` in the future) or soft-deleted, and the owner still has a `user_profiles` row with
+role `master` or `admin`. Any failure returns `401 unauthorized` with no detail about which check
+failed.
 
 ## 2. Scopes
 
@@ -161,7 +162,8 @@ Body: any of `title`, `slug`, `excerpt`, `category`, `featured_image_url`, `cont
 
 - `if_updated_at`: if present and not equal to the stored `updated_at`, respond `409 conflict` with
   `details: { "current_updated_at": "…" }` and change nothing.
-- Content HTML is regenerated **only** when content is provided.
+- Content HTML is regenerated **only** when content is provided; if regeneration fails the request
+  returns `500 internal` and nothing is written (the web editor's PUT keeps the old HTML instead).
 - `status: "published"` on a draft sets `published_at` to now; `status: "draft"` clears it.
 - The server always bumps `updated_at`.
 
@@ -182,9 +184,11 @@ Scope `categories:write`. Body: `name` (1–100), `slug`, `description` (1–100
 `201`: Category. Slug taken → `409`.
 
 ### `PATCH /api/v1/categories/:id`
+`:id` must be a UUID (a non-UUID returns `404 not_found` without querying the database).
 Scope `categories:write`. Partial update of `name`, `slug`, `description`. `200`: Category.
 
 ### `DELETE /api/v1/categories/:id`
+`:id` must be a UUID (a non-UUID returns `404 not_found` without querying the database).
 Scope `categories:write`. `409 conflict` if any post uses the category.
 `200`: `{ "deleted": true, "id": "uuid" }`.
 
@@ -214,8 +218,16 @@ The token string is returned **only** in this response and never stored server-s
 
 ## 6. Content rules for v1 writes
 
+- `content_markdown` is limited to 200 000 characters and `content_lexical` to 2 MB of JSON; a larger
+  payload is rejected with `validation_failed` before any conversion or parsing. In addition, a
+  single text block — a run of consecutive non-blank lines — may not exceed 10 000 characters
+  (fenced code blocks are exempt); a larger block is rejected with `validation_failed` and the
+  message "a paragraph exceeds 10000 characters".
 - `content_markdown` is converted Markdown → Lexical JSON (server-side, headless) → HTML.
-- `content_lexical` must be an object with `root.type === "root"` and a `children` array.
+- `content_lexical` must be an object with `root.type === "root"` and a `children` array. Every node
+  `type` must be one the editor can render; unknown types are rejected with the offending paths in
+  `details.fields.content_lexical`. The state is then parsed and re-serialized through the editor
+  (unknown fields are dropped) before URL checks and storage.
 - **URL rules** (applied to Lexical JSON from either source, before saving):
   - Image `src` and `featured_image_url`: `http(s)://…` or site-relative (`/…`). `data:` URIs are
     rejected with `validation_failed` and the hint "upload images with POST /api/v1/media first".
