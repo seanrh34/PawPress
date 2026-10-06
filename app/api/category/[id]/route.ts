@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getUser } from '@/lib/auth';
 
 const RESERVED_SLUGS = ['admin', 'api', 'category'];
 
@@ -44,6 +45,15 @@ export async function PUT(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  // Check authentication
+  const user = await getUser();
+  if (!user) {
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401 }
+    );
+  }
+
   try {
     const { id } = await context.params;
     const body = await request.json();
@@ -119,6 +129,15 @@ export async function DELETE(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  // Check authentication
+  const user = await getUser();
+  if (!user) {
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401 }
+    );
+  }
+
   try {
     const { id } = await context.params;
 
