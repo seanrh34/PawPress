@@ -89,6 +89,10 @@ describe('isAllowedLinkUrl', () => {
     '/blog/post',
     '/blog/post?q=1',
     '#section',
+    'https://',
+    'http://',
+    'HTTP://',
+    '  https://  ',
   ])('allows %s', (url) => {
     expect(isAllowedLinkUrl(url)).toBe(true);
   });
@@ -110,6 +114,10 @@ describe('isAllowedLinkUrl', () => {
     '/a b.png',
     'https://exa mple.com',
     'mailto:a b@example.com',
+    'https:',
+    'http:/',
+    'https:///',
+    'https:// http://',
   ])('rejects %s', (url) => {
     expect(isAllowedLinkUrl(url)).toBe(false);
   });
