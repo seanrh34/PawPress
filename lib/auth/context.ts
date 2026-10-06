@@ -106,6 +106,22 @@ export async function getTokenAuth(
       throw UNAUTHORIZED();
     }
 
+    // A revoked/banned/deleted owner must lose access immediately, not only
+    // when the profile is removed or the token expires. The admin `User` type
+    // does not declare these GoTrue fields, so read them defensively.
+    const bannedUntil = (user as { banned_until?: unknown }).banned_until;
+    if (typeof bannedUntil === 'string' && bannedUntil !== '') {
+      const bannedUntilMs = Date.parse(bannedUntil);
+      if (Number.isFinite(bannedUntilMs) && bannedUntilMs > Date.now()) {
+        throw UNAUTHORIZED();
+      }
+    }
+
+    const deletedAt = (user as { deleted_at?: unknown }).deleted_at;
+    if (typeof deletedAt === 'string' && deletedAt !== '') {
+      throw UNAUTHORIZED();
+    }
+
     const active = await tokenStore.isActive(verified.userId, verified.tokenId);
     if (!active) {
       throw UNAUTHORIZED();

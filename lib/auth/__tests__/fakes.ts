@@ -4,6 +4,8 @@ export interface FakeAuthUser {
   id: string;
   email: string | null;
   app_metadata: Record<string, unknown>;
+  banned_until?: string | null;
+  deleted_at?: string | null;
 }
 
 export interface FakeAdminState {

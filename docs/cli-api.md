@@ -22,9 +22,10 @@ var `PAWPRESS_TOKEN_SECRET`). Claims: `iss: "pawpress"`, `sub` (user id), `jti` 
 `scp` (scopes), `iat`, `exp`. Clients must treat the token as opaque.
 
 A token is accepted only if **all** of these hold: the signature is valid, `iss` is correct, it hasn't
-expired, its `jti` is still in the owner's active-token list (not revoked), and the owner still has a
-`user_profiles` row with role `master` or `admin`. Any failure returns `401 unauthorized` with no
-detail about which check failed.
+expired, its `jti` is still in the owner's active-token list (not revoked), the owner is not banned
+(`banned_until` in the future) or soft-deleted, and the owner still has a `user_profiles` row with
+role `master` or `admin`. Any failure returns `401 unauthorized` with no detail about which check
+failed.
 
 ## 2. Scopes
 
