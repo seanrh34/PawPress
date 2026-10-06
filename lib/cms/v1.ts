@@ -330,8 +330,8 @@ export function resolveLexicalContent(
   let normalized: SerializedEditorState;
   try {
     normalized = normalizeLexicalState(value);
-  } catch (error) {
-    console.error('Failed to normalize content_lexical:', error);
+  } catch {
+    // Do not log the error: it can embed submitted content.
     throw ApiError.validation('content_lexical is not a valid editor state', {
       fields: {
         content_lexical: ['Must be a serialized Lexical editor state'],
