@@ -49,6 +49,12 @@ Personal access tokens are currently tracked in each user's `auth.users.app_meta
 `lib/auth/tokenStore.ts`. Limitations: read-modify-write races when two tokens are created or revoked
 at the same moment, the list is visible in the user's own JWT, and it's capped at 10 tokens per user.
 
+**Main security reason to migrate soon:** the store is a read-modify-write over the whole token list,
+so a **revoke racing with a concurrent token creation can be silently undone**. Both requests read the
+same list, the creation writes `[...old, new]`, then the revoke's stale write puts the revoked token
+back. The revoked token then keeps working even though the user was told it was revoked. An
+`api_tokens` table with a per-row `DELETE`/`revoked_at` update is atomic and removes this race.
+
 Suggested table:
 
 ```
@@ -90,3 +96,15 @@ refresh, not immediately.
   sets `updated_at` itself, and optimistic concurrency relies on it changing on every write.
 - `README.md` documents the schema as the code uses it today. Consider committing the real schema as
   migrations (`supabase/migrations/`) so it can't drift from the docs again.
+
+## (h) Add a Content-Security-Policy header — security (recommended)
+
+Post bodies are stored as Lexical JSON and rendered with `dangerouslySetInnerHTML`
+(`app/[slug]/page.tsx`), so `content_html` is an XSS sink that is defended in application code
+(`lib/lexicalToHtml.ts` escapes/allow-lists output, and v1 writes are normalised and URL-checked). A
+strict `Content-Security-Policy` is a valuable second layer: add one via `next.config.ts` headers (or
+the host's edge config), e.g. `default-src 'self'`, `img-src 'self' https: data:`,
+`frame-src https://www.youtube.com`, `object-src 'none'`, `base-uri 'self'`, and avoid
+`unsafe-inline` for scripts. Note Next.js’s own runtime may need nonces/`'unsafe-inline'` for styles
+and inline bootstrap scripts, so start in report-only mode and tune before enforcing. This has **not**
+been added yet.
