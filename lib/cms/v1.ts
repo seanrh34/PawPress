@@ -132,14 +132,14 @@ export const listPostsQuerySchema = z
     q: z.string().optional(),
     limit: z.coerce.number().int().min(1).max(100).default(20),
     offset: z.coerce.number().int().min(0).default(0),
-  })
-  .strict();
+  });
+// Query schemas strip unknown keys instead of rejecting them: proxies and
+// Vercel's protection bypass (?x-vercel-protection-bypass=...) add their own.
 
 export const getPostQuerySchema = z
   .object({
     format: z.enum(['markdown', 'lexical', 'html']).default('markdown'),
-  })
-  .strict();
+  });
 
 export const createPostBodySchema = z
   .object({

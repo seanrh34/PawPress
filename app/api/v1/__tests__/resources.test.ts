@@ -467,6 +467,41 @@ describe('post update scopes', () => {
     expect(body.error.details.current_updated_at).toBe(T1);
     expect(db.callsFor('posts', 'update')).toHaveLength(0);
   });
+
+  it('binds a PATCH without if_updated_at to the version its scopes were checked on', async () => {
+    const token = await issueToken(['posts:write']);
+    // The route authorizes against a draft; by the time the service re-reads
+    // it, someone has published it.
+    db.enqueue(
+      'posts',
+      { data: postRow({ updated_at: T0 }) },
+      { data: postRow({ updated_at: T1, published_at: T1 }) },
+    );
+    const response = await postPatch(
+      authedJson(`${BASE}/posts/${UUID}`, 'PATCH', token, { title: 'New' }),
+      ctxFor(UUID),
+    );
+    expect(response.status).toBe(409);
+    expect(db.callsFor('posts', 'update')).toHaveLength(0);
+  });
+
+  it('writes conditionally on the authorized updated_at when if_updated_at is omitted', async () => {
+    const token = await issueToken(['posts:write']);
+    db.enqueue(
+      'posts',
+      { data: postRow() },
+      { data: postRow() },
+      { data: barePostRow({ title: 'New' }) },
+      { data: postRow({ title: 'New' }) },
+    );
+    const response = await postPatch(
+      authedJson(`${BASE}/posts/${UUID}`, 'PATCH', token, { title: 'New' }),
+      ctxFor(UUID),
+    );
+    expect(response.status).toBe(200);
+    const eqArgs = db.callsFor('posts', 'eq').map((call) => call.args);
+    expect(eqArgs).toContainEqual(['updated_at', T0]);
+  });
 });
 
 describe('v1 content validation', () => {
@@ -632,6 +667,21 @@ describe('post lookups and formats', () => {
     expect(response.status).toBe(200);
     expect((await response.json()).id).toBe(UUID);
     expect(db.callsFor('posts', 'eq')[0].args).toEqual(['slug', 'hello']);
+  });
+
+  it('ignores unknown query parameters such as the Vercel bypass', async () => {
+    const token = await issueToken(['posts:read']);
+    db.enqueue('posts', { data: postRow() });
+    const response = await postGet(
+      authed(
+        `${BASE}/posts/${UUID}?format=html&x-vercel-protection-bypass=abc`,
+        'GET',
+        token,
+      ),
+      ctxFor(UUID),
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).content_format).toBe('html');
   });
 
   it('looks up by id for a UUID', async () => {
