@@ -25,6 +25,10 @@ import type { PostRow } from '../postService';
 
 const UUID = '22222222-2222-4222-8222-222222222222';
 
+const T0 = '2026-01-01T00:00:00.000Z';
+const T1 = '2026-01-01T00:00:01.000Z';
+const T2 = '2026-01-01T00:00:02.000Z';
+
 const category: CategoryRow = {
   id: '33333333-3333-4333-8333-333333333333',
   name: 'News',
@@ -65,6 +69,19 @@ function updatePayload(
   db: ReturnType<typeof makeDb>,
 ): Record<string, unknown> {
   return db.callsFor('posts', 'update')[0].args[0] as Record<string, unknown>;
+}
+
+function updateEqFilters(db: ReturnType<typeof makeDb>): unknown[][] {
+  const start = db.calls.findIndex(
+    (call) => call.table === 'posts' && call.method === 'update',
+  );
+  const end = db.calls.findIndex(
+    (call, index) => index > start && call.method === 'select',
+  );
+  return db.calls
+    .slice(start, end === -1 ? undefined : end)
+    .filter((call) => call.method === 'eq')
+    .map((call) => call.args);
 }
 
 describe('createPost', () => {
@@ -178,7 +195,7 @@ describe('createPost', () => {
 describe('updatePost', () => {
   it('conflicts on if_updated_at mismatch and writes nothing', async () => {
     const db = makeDb({
-      posts: [{ data: { ...post, updated_at: 't1' } }],
+      posts: [{ data: { ...post, updated_at: T1 } }],
     });
 
     await expect(
@@ -186,19 +203,90 @@ describe('updatePost', () => {
         db.client,
         UUID,
         { title: 'New' },
-        { ifUpdatedAt: 't0' },
+        { ifUpdatedAt: T0 },
       ),
     ).rejects.toMatchObject({
       code: 'conflict',
-      details: { current_updated_at: 't1' },
+      details: { current_updated_at: T1 },
     });
     expect(db.callsFor('posts', 'update')).toHaveLength(0);
+  });
+
+  it('rejects an unparseable if_updated_at before any write', async () => {
+    const db = makeDb();
+
+    await expect(
+      updatePost(db.client, UUID, { title: 'New' }, { ifUpdatedAt: 'not-a-date' }),
+    ).rejects.toMatchObject({
+      code: 'validation_failed',
+      details: { fields: { if_updated_at: ['Must be a valid ISO timestamp'] } },
+    });
+    expect(db.callsFor('posts', 'maybeSingle')).toHaveLength(0);
+    expect(db.callsFor('posts', 'update')).toHaveLength(0);
+  });
+
+  it('conflicts when the conditional update matches no row (concurrent write)', async () => {
+    const db = makeDb({
+      posts: [
+        { data: { ...post, updated_at: T1 } },
+        { data: null },
+        { data: { ...post, updated_at: T2 } },
+      ],
+    });
+
+    await expect(
+      updatePost(db.client, UUID, { title: 'New' }, { ifUpdatedAt: T1 }),
+    ).rejects.toMatchObject({
+      code: 'conflict',
+      details: { current_updated_at: T2 },
+    });
+
+    expect(updateEqFilters(db)).toEqual([
+      ['id', UUID],
+      ['updated_at', T1],
+    ]);
+  });
+
+  it('returns not_found when the row disappears during a conditional update', async () => {
+    const db = makeDb({
+      posts: [
+        { data: { ...post, updated_at: T1 } },
+        { data: null },
+        { data: null },
+      ],
+    });
+
+    await expect(
+      updatePost(db.client, UUID, { title: 'New' }, { ifUpdatedAt: T1 }),
+    ).rejects.toMatchObject({ code: 'not_found' });
+  });
+
+  it('adds the updated_at filter only when if_updated_at is given', async () => {
+    const withGuard = makeDb({
+      posts: [
+        { data: { ...post, updated_at: T1 } },
+        { data: post },
+      ],
+    });
+    await updatePost(withGuard.client, UUID, { title: 'New' }, {
+      ifUpdatedAt: T1,
+    });
+    expect(updateEqFilters(withGuard)).toEqual([
+      ['id', UUID],
+      ['updated_at', T1],
+    ]);
+
+    const withoutGuard = makeDb({
+      posts: [{ data: { ...post, updated_at: T1 } }, { data: post }],
+    });
+    await updatePost(withoutGuard.client, UUID, { title: 'New' });
+    expect(updateEqFilters(withoutGuard)).toEqual([['id', UUID]]);
   });
 
   it('does not touch content when content is absent from the patch', async () => {
     const db = makeDb({
       posts: [
-        { data: { ...post, updated_at: 't1' } },
+        { data: { ...post, updated_at: T1 } },
         { data: { ...post, title: 'New' } },
       ],
     });
@@ -215,7 +303,7 @@ describe('updatePost', () => {
   it('regenerates content_html when content is provided', async () => {
     const db = makeDb({
       posts: [
-        { data: { ...post, updated_at: 't1' } },
+        { data: { ...post, updated_at: T1 } },
         { data: { ...post, content_html: '<p>ok</p>' } },
       ],
     });
@@ -233,7 +321,7 @@ describe('updatePost', () => {
 
     const db = makeDb({
       posts: [
-        { data: { ...post, updated_at: 't1' } },
+        { data: { ...post, updated_at: T1 } },
         { data: post },
       ],
     });

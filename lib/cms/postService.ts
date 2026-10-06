@@ -290,12 +290,22 @@ export async function updatePost(
   patch: UpdatePostPatch,
   opts: UpdatePostOptions = {},
 ): Promise<PostRow> {
+  const ifUpdatedAt = opts.ifUpdatedAt;
+
+  if (ifUpdatedAt !== undefined && Number.isNaN(Date.parse(ifUpdatedAt))) {
+    throw ApiError.validation('if_updated_at must be a valid ISO timestamp', {
+      fields: { if_updated_at: ['Must be a valid ISO timestamp'] },
+    });
+  }
+
   const current = await getPostById(db, id);
   if (!current) {
     throw ApiError.notFound('Post not found');
   }
 
-  if (opts.ifUpdatedAt !== undefined && opts.ifUpdatedAt !== current.updated_at) {
+  // Fast path: avoid a write attempt when we already know it would fail. The
+  // conditional UPDATE below is the authoritative check.
+  if (ifUpdatedAt !== undefined && ifUpdatedAt !== current.updated_at) {
     throw ApiError.conflict('The post was modified by someone else', {
       current_updated_at: current.updated_at,
     });
@@ -351,12 +361,14 @@ export async function updatePost(
 
   update.updated_at = new Date().toISOString();
 
-  const { data, error } = await db
-    .from('posts')
-    .update(update)
-    .eq('id', id)
-    .select()
-    .maybeSingle();
+  let mutation = db.from('posts').update(update).eq('id', id);
+  if (ifUpdatedAt !== undefined) {
+    // Optimistic concurrency: the write only lands if the row still has the
+    // revision the client last saw.
+    mutation = mutation.eq('updated_at', ifUpdatedAt);
+  }
+
+  const { data, error } = await mutation.select().maybeSingle();
 
   if (error) {
     if (isUniqueViolation(error)) {
@@ -367,6 +379,15 @@ export async function updatePost(
   }
 
   if (!data) {
+    if (ifUpdatedAt !== undefined) {
+      const fresh = await getPostById(db, id);
+      if (!fresh) {
+        throw ApiError.notFound('Post not found');
+      }
+      throw ApiError.conflict('The post was modified by someone else', {
+        current_updated_at: fresh.updated_at,
+      });
+    }
     throw ApiError.notFound('Post not found');
   }
 
