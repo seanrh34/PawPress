@@ -80,8 +80,8 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (profileError) {
-      // RoladminClientelete the auth user if profile creation fails
-      await supabase.auth.admin.deleteUser(authData.user.id);
+      // Roll back: delete the auth user if profile creation fails
+      await adminClient.auth.admin.deleteUser(authData.user.id);
       console.error('Error creating profile:', profileError);
       return NextResponse.json(
         { error: profileError.message || 'Failed to create user profile' },

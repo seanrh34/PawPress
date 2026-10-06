@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getUser } from '@/lib/auth';
 
 const RESERVED_SLUGS = ['admin', 'api', 'category'];
 
@@ -36,6 +37,15 @@ export async function GET() {
 
 // POST - Create new category
 export async function POST(request: Request) {
+  // Check authentication
+  const user = await getUser();
+  if (!user) {
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401 }
+    );
+  }
+
   try {
     const body = await request.json();
     const { name, slug, description } = body;
