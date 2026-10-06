@@ -69,9 +69,15 @@ Creates a post when the front matter has no id, otherwise updates it.
   --write-back   Rewrite the file with the returned id/updated_at and image URLs
 
 Update sends "status" only when --publish is given or the front matter has a
-status field. Without --write-back the local updated_at becomes stale.`,
+status field. Without --write-back the local updated_at becomes stale.
+
+Only relative image paths (e.g. img/x.png, ./x.png) are uploaded; site-relative
+(/...) and remote (http/data) references are left untouched.`,
   'posts create': `Usage: pawpress posts create --title T --category C [--slug S] [--excerpt E]
-                                  (--file f.md | --stdin) [--publish] [--dry-run]`,
+                                  (--file f.md | --stdin) [--publish] [--dry-run]
+
+Only relative image paths (e.g. img/x.png, ./x.png) are uploaded; site-relative
+(/...) and remote (http/data) references are left untouched.`,
   'posts update': `Usage: pawpress posts update <id> [options]
 
   --title T, --slug S, --excerpt E, --category C, --featured-image URL

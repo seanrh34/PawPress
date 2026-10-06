@@ -70,9 +70,16 @@ Global flags: `--json`, `--url <site>`, `--token <token>`, `-h/--help`, `--versi
 `--json` (or `PAWPRESS_OUTPUT=json`) prints exactly one JSON document to stdout.
 
 Push reads YAML front matter (`id`, `title`, `slug`, `category`, `excerpt`,
-`featured_image`, `status`, `updated_at`) followed by Markdown. Local images are
-uploaded automatically and their references rewritten. Updating sends
-`if_updated_at` from the front matter unless `--force` is given.
+`featured_image`, `status`, `updated_at`) followed by Markdown. Only **relative**
+image paths (`img/x.png`, `./x.png`, `../x.png`) are uploaded automatically and
+their references rewritten; site-relative (`/...`), protocol-relative, `data:`
+and remote URLs are left untouched. The same rule applies to a local
+`featured_image`. Updating sends `if_updated_at` from the front matter unless
+`--force` is given.
+
+Ids that the API treats as UUIDs (post `id` in front matter and the positional
+ids of `posts update|publish|unpublish|delete` and `categories update|delete`)
+are validated locally; a non-UUID name exits `2` before any request.
 
 ## Exit codes
 
