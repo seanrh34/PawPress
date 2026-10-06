@@ -105,6 +105,20 @@ describe('posts push', () => {
     expect(bodyOf(harness.calls[0]?.init).if_updated_at).toBeUndefined();
   });
 
+  it('rejects a non-uuid front matter id before any request', async () => {
+    const dir = await makeTempDir();
+    const file = await writeTempFile(
+      dir,
+      'post.md',
+      `---\nid: ../categories/x\ntitle: X\ncategory: news\nupdated_at: ${UPDATED}\n---\nBody`,
+    );
+    const harness = makeFetch(() => response(200, serverPost()));
+    const h = makeHarness({ env: ENV, cwd: dir, fetch: harness.fetch });
+    expect(await h.run(['posts', 'push', file])).toBe(2);
+    expect(h.stderrText()).toMatch(/UUID/);
+    expect(harness.calls).toHaveLength(0);
+  });
+
   it('fails with exit 2 when updated_at is missing and no --force', async () => {
     const dir = await makeTempDir();
     const file = await writeTempFile(dir, 'post.md', `---\nid: ${POST_ID}\ntitle: X\ncategory: news\n---\nBody`);
@@ -225,6 +239,17 @@ describe('posts push local images', () => {
     const h = makeHarness({ env: ENV, cwd: dir, fetch: harness.fetch });
     expect(await h.run(['posts', 'push', file])).toBe(2);
     expect(harness.calls).toHaveLength(0);
+  });
+});
+
+describe('posts get encoding', () => {
+  it('encodes the id|slug path segment', async () => {
+    const harness = makeFetch(() => response(200, serverPost({ content: '' })));
+    const h = makeHarness({ env: ENV, fetch: harness.fetch });
+    expect(await h.run(['posts', 'get', 'a b/c', '--json'])).toBe(0);
+    expect(harness.calls[0]?.url).toBe(
+      'https://site.example/api/v1/posts/a%20b%2Fc?format=markdown',
+    );
   });
 });
 

@@ -4,36 +4,71 @@ import { configFilePath, readConfigFile } from '../src/config';
 import { makeFetch, makeHarness, makeTempDir, response } from './helpers';
 
 const ENV = { PAWPRESS_URL: 'https://site.example', PAWPRESS_TOKEN: 'pp_test_token' };
+const POST_ID = '11111111-1111-1111-1111-111111111111';
+const CATEGORY_ID = '22222222-2222-2222-2222-222222222222';
 
 describe('destructive commands', () => {
   it('posts delete without --yes is a usage error and makes no request', async () => {
-    const harness = makeFetch(() => response(200, { deleted: true, id: 'p1' }));
+    const harness = makeFetch(() => response(200, { deleted: true, id: POST_ID }));
     const h = makeHarness({ env: ENV, fetch: harness.fetch });
-    expect(await h.run(['posts', 'delete', 'p1'])).toBe(2);
+    expect(await h.run(['posts', 'delete', POST_ID])).toBe(2);
     expect(h.stderrText()).toMatch(/--yes/);
     expect(harness.calls).toHaveLength(0);
   });
 
   it('posts delete --yes --dry-run prints a DELETE plan without a request', async () => {
-    const harness = makeFetch(() => response(200, { deleted: true, id: 'p1' }));
+    const harness = makeFetch(() => response(200, { deleted: true, id: POST_ID }));
     const h = makeHarness({ env: ENV, fetch: harness.fetch });
-    expect(await h.run(['posts', 'delete', 'p1', '--yes', '--dry-run', '--json'])).toBe(0);
+    expect(await h.run(['posts', 'delete', POST_ID, '--yes', '--dry-run', '--json'])).toBe(0);
     expect(harness.calls).toHaveLength(0);
     const doc = JSON.parse(h.stdoutText()) as { requests: Array<{ method: string }> };
     expect(doc.requests[0]?.method).toBe('DELETE');
   });
 
   it('posts delete --yes performs the request', async () => {
-    const harness = makeFetch(() => response(200, { deleted: true, id: 'p1' }));
+    const harness = makeFetch(() => response(200, { deleted: true, id: POST_ID }));
     const h = makeHarness({ env: ENV, fetch: harness.fetch });
-    expect(await h.run(['posts', 'delete', 'p1', '--yes', '--json'])).toBe(0);
+    expect(await h.run(['posts', 'delete', POST_ID, '--yes', '--json'])).toBe(0);
     expect(harness.methods()).toEqual(['DELETE']);
   });
 
   it('categories delete without --yes is a usage error', async () => {
-    const harness = makeFetch(() => response(200, { deleted: true, id: 'c1' }));
+    const harness = makeFetch(() => response(200, { deleted: true, id: CATEGORY_ID }));
     const h = makeHarness({ env: ENV, fetch: harness.fetch });
-    expect(await h.run(['categories', 'delete', 'c1'])).toBe(2);
+    expect(await h.run(['categories', 'delete', CATEGORY_ID])).toBe(2);
+    expect(harness.calls).toHaveLength(0);
+  });
+});
+
+describe('uuid validation', () => {
+  it('posts update rejects a non-uuid id without a request', async () => {
+    const harness = makeFetch(() => response(200, {}));
+    const h = makeHarness({ env: ENV, fetch: harness.fetch });
+    expect(await h.run(['posts', 'update', 'not-a-uuid', '--title', 'X'])).toBe(2);
+    expect(h.stderrText()).toMatch(/expected a UUID/);
+    expect(harness.calls).toHaveLength(0);
+  });
+
+  it('posts publish rejects a path-traversal id', async () => {
+    const harness = makeFetch(() => response(200, {}));
+    const h = makeHarness({ env: ENV, fetch: harness.fetch });
+    expect(await h.run(['posts', 'publish', '../categories/x'])).toBe(2);
+    expect(harness.calls).toHaveLength(0);
+  });
+
+  it('posts delete rejects a non-uuid id before --yes handling', async () => {
+    const harness = makeFetch(() => response(200, { deleted: true, id: 'x' }));
+    const h = makeHarness({ env: ENV, fetch: harness.fetch });
+    expect(await h.run(['posts', 'delete', 'not-a-uuid', '--yes'])).toBe(2);
+    expect(harness.calls).toHaveLength(0);
+  });
+
+  it('categories update and delete reject non-uuid ids', async () => {
+    const harness = makeFetch(() => response(200, {}));
+    const update = makeHarness({ env: ENV, fetch: harness.fetch });
+    expect(await update.run(['categories', 'update', 'nope', '--name', 'X'])).toBe(2);
+    const remove = makeHarness({ env: ENV, fetch: harness.fetch });
+    expect(await remove.run(['categories', 'delete', 'nope', '--yes'])).toBe(2);
     expect(harness.calls).toHaveLength(0);
   });
 });
@@ -52,7 +87,7 @@ describe('dry-run does not mutate', () => {
   it('posts update --dry-run sends no request', async () => {
     const harness = makeFetch(() => response(200, {}));
     const h = makeHarness({ env: ENV, fetch: harness.fetch });
-    expect(await h.run(['posts', 'update', 'p1', '--title', 'X', '--dry-run', '--json'])).toBe(0);
+    expect(await h.run(['posts', 'update', POST_ID, '--title', 'X', '--dry-run', '--json'])).toBe(0);
     expect(harness.calls).toHaveLength(0);
   });
 });

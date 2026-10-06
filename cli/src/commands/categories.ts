@@ -1,5 +1,6 @@
 import { optBool, optString, parseOptions } from '../args';
 import { CliError, EXIT, usageError } from '../errors';
+import { assertUuid } from '../ids';
 import { makeClient } from '../runtime';
 import { truncate } from '../output';
 import type { Context } from '../runtime';
@@ -87,9 +88,10 @@ async function categoriesUpdate(ctx: Context, args: string[]): Promise<void> {
     },
     true,
   );
-  const [id, ...extra] = positionals;
-  if (!id) throw usageError('categories update requires an <id>');
+  const [rawId, ...extra] = positionals;
+  if (!rawId) throw usageError('categories update requires an <id>');
   if (extra.length > 0) throw usageError('categories update accepts a single <id>');
+  const id = assertUuid(rawId, 'category id');
 
   const body: Record<string, unknown> = {};
   const name = optString(values, 'name');
@@ -120,9 +122,10 @@ async function categoriesDelete(ctx: Context, args: string[]): Promise<void> {
     { yes: { type: 'boolean' }, 'dry-run': { type: 'boolean' } },
     true,
   );
-  const [id, ...extra] = positionals;
-  if (!id) throw usageError('categories delete requires an <id>');
+  const [rawId, ...extra] = positionals;
+  if (!rawId) throw usageError('categories delete requires an <id>');
   if (extra.length > 0) throw usageError('categories delete accepts a single <id>');
+  const id = assertUuid(rawId, 'category id');
   if (!optBool(values, 'yes')) throw usageError('categories delete requires --yes');
 
   const path = `/api/v1/categories/${encodeURIComponent(id)}`;

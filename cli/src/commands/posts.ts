@@ -1,6 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { optBool, optString, parseOptions } from '../args';
 import { CliError, EXIT, usageError } from '../errors';
+import { assertUuid } from '../ids';
 import { parseFrontMatter, serializeFrontMatter } from '../frontmatter';
 import { assertLocalImagesExist, scanLocalImages, uniqueByAbsolutePath } from '../images';
 import { makeClient } from '../runtime';
@@ -187,7 +188,8 @@ async function postsPush(ctx: Context, args: string[]): Promise<void> {
   const text = await readContentFile(file);
   const doc = parseFrontMatter(text);
   const fields = readFields(doc.data);
-  const isUpdate = fields.id !== undefined;
+  const updateId = fields.id !== undefined ? assertUuid(fields.id, 'post id') : undefined;
+  const isUpdate = updateId !== undefined;
 
   if (isUpdate && !fields.updatedAt && !force) {
     throw usageError(
@@ -213,7 +215,7 @@ async function postsPush(ctx: Context, args: string[]): Promise<void> {
   const body: Record<string, unknown> = isUpdate
     ? updateBody(fields, prepared, publish, force)
     : createBody(fields, prepared, publish);
-  const path = isUpdate ? `/api/v1/posts/${fields.id}` : '/api/v1/posts';
+  const path = isUpdate && updateId ? `/api/v1/posts/${encodeURIComponent(updateId)}` : '/api/v1/posts';
 
   if (dryRun) {
     renderPlan(out, [{ method: isUpdate ? 'PATCH' : 'POST', path, body }], prepared.uploads);
@@ -221,7 +223,7 @@ async function postsPush(ctx: Context, args: string[]): Promise<void> {
   }
 
   const client = await makeClient(ctx);
-  const post = await sendPost(client, isUpdate ? 'PATCH' : 'POST', path, body, isUpdate, fields.id);
+  const post = await sendPost(client, isUpdate ? 'PATCH' : 'POST', path, body, isUpdate, updateId);
 
   if (writeBack) {
     const nextData: Record<string, unknown> = { ...doc.data };
@@ -320,7 +322,7 @@ async function postsUpdate(ctx: Context, args: string[]): Promise<void> {
     },
     true,
   );
-  const id = singleRef(positionals, 'posts update');
+  const id = assertUuid(singleRef(positionals, 'posts update'), 'post id');
   const title = optString(values, 'title');
   const slug = optString(values, 'slug');
   const excerpt = optString(values, 'excerpt');
@@ -385,7 +387,7 @@ async function postsSetStatus(
 ): Promise<void> {
   const { out } = ctx;
   const { positionals } = parseOptions(args, {}, true);
-  const id = singleRef(positionals, `posts ${action}`);
+  const id = assertUuid(singleRef(positionals, `posts ${action}`), 'post id');
   const client = await makeClient(ctx);
   const post = await client.request<Post>({
     method: 'POST',
@@ -402,7 +404,7 @@ async function postsDelete(ctx: Context, args: string[]): Promise<void> {
     { yes: { type: 'boolean' }, 'dry-run': { type: 'boolean' } },
     true,
   );
-  const id = singleRef(positionals, 'posts delete');
+  const id = assertUuid(singleRef(positionals, 'posts delete'), 'post id');
   const dryRun = optBool(values, 'dry-run');
   if (!optBool(values, 'yes')) {
     throw usageError('posts delete requires --yes');
