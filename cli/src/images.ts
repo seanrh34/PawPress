@@ -29,7 +29,7 @@ export function isLocalImagePath(path: string): boolean {
   const value = stripAngles(path).trim();
   if (!value) return false;
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value)) return false;
-  if (value.startsWith('//')) return false;
+  if (value.startsWith('/')) return false;
   if (value.startsWith('#')) return false;
   return true;
 }

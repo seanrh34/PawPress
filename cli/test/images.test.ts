@@ -31,17 +31,28 @@ describe('scanLocalImages', () => {
     expect(uniqueByAbsolutePath(refs)).toHaveLength(1);
   });
 
-  it('skips remote, data, protocol-relative and fragment paths', () => {
+  it('skips remote, data, protocol-relative, site-relative and fragment paths', () => {
     const markdown = [
       '![r](https://cdn.example/a.png)',
       '![d](data:image/png;base64,AAAA)',
       '![p](//cdn.example/a.png)',
+      '![s](/images/cat.png)',
       '![f](#anchor)',
     ].join('\n');
     expect(scanLocalImages(markdown, null, '/tmp/base')).toHaveLength(0);
     expect(isLocalImagePath('http://x/y.png')).toBe(false);
     expect(isLocalImagePath('data:image/png,xxx')).toBe(false);
+    expect(isLocalImagePath('//cdn.example/a.png')).toBe(false);
+    expect(isLocalImagePath('/images/cat.png')).toBe(false);
+    expect(isLocalImagePath('/uploads/x.png')).toBe(false);
+    expect(isLocalImagePath('#anchor')).toBe(false);
     expect(isLocalImagePath('img/a.png')).toBe(true);
+    expect(isLocalImagePath('../assets/x.png')).toBe(true);
+  });
+
+  it('leaves site-relative and absolute paths untouched, including featured_image', () => {
+    const refs = scanLocalImages('![s](/images/cat.png)', '/images/cover.png', '/tmp/base');
+    expect(refs).toHaveLength(0);
   });
 
   it('skips images inside fenced code blocks', () => {
