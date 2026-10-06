@@ -21,7 +21,7 @@ import { MAX_SLUG_LENGTH } from './slug';
  * except from `GET /posts/:idOrSlug`.
  */
 
-export const MAX_MARKDOWN_CHARS = 500_000;
+export const MAX_MARKDOWN_CHARS = 200_000;
 export const MAX_LEXICAL_BYTES = 2 * 1024 * 1024;
 
 export interface CategoryResource {

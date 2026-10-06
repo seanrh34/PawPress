@@ -111,8 +111,10 @@ const IMAGE: TextMatchTransformer = {
     }
     return `![${node.__altText}](${node.__src})`;
   },
-  importRegExp: /!\[([^\]]*)\]\(([^)\s]+)\)/,
-  regExp: /!\[([^\]]*)\]\(([^)\s]+)\)$/,
+  // Quantifiers are bounded so a pathological run of `![` cannot trigger
+  // super-linear backtracking (the old `[^\]]*` was O(n^2)).
+  importRegExp: /!\[([^\]\n]{0,1000})\]\(([^)\s]{1,2048})\)/,
+  regExp: /!\[([^\]\n]{0,1000})\]\(([^)\s]{1,2048})\)$/,
   replace: (textNode, match) => {
     const [, altText, src] = match;
     if (!src) {
@@ -125,6 +127,23 @@ const IMAGE: TextMatchTransformer = {
 };
 
 const YOUTUBE_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
+
+/**
+ * The bundled LINK transformer's regex uses an unbounded lazy `(.+?)`, which
+ * backtracks quadratically on hostile input such as `'['.repeat(100_000)`
+ * (measured ~5 s at 100k characters). Re-declare it with bounded quantifiers
+ * while reusing Lexical's own `export`/`replace` logic unchanged; only the
+ * regex is replaced. Link text longer than 1000 chars or a URL longer than 2048
+ * is not imported as a link, which is well above any real link and matches the
+ * caps used for images.
+ */
+const SAFE_LINK: TextMatchTransformer = {
+  ...LINK,
+  importRegExp:
+    /\[([^\n]{1,1000}?)\]\((?:([^()\s]{1,2048})(?:\s"((?:[^"]*\\")*[^"]*)"\s*)?)\)/,
+  regExp:
+    /\[([^\n]{1,1000}?)\]\((?:([^()\s]{1,2048})(?:\s"((?:[^"]*\\")*[^"]*)"\s*)?)\)$/,
+};
 
 /**
  * A paragraph consisting solely of a YouTube URL in any of the common shapes:
@@ -285,7 +304,7 @@ const MARKDOWN_TRANSFORMERS: Transformer[] = [
   // `[alt](src)` tail, and the first transformer with the earliest match wins.
   IMAGE,
   YOUTUBE,
-  LINK,
+  SAFE_LINK,
 ];
 
 const LIST_MARKER_REG_EXP = /^([ \t]*)([-*+]|\d{1,}\.)([ \t]+)/;

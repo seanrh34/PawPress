@@ -131,5 +131,7 @@ export function mapOutsideFences(markdown: string, fn: (line: string) => string)
 }
 
 function imageRegex(): RegExp {
-  return /!\[([^\]]*)\]\(\s*(<[^>]*>|[^)\s]+)(\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/g;
+  // Quantifiers are bounded to avoid super-linear backtracking on hostile
+  // input; these limits are far above any real image reference.
+  return /!\[([^\]\n]{0,1000})\]\(\s*(<[^>\n]{1,2048}>|[^)\s]{1,2048})(\s+(?:"[^"\n]{0,1000}"|'[^'\n]{0,1000}'|\([^)\n]{0,1000}\)))?\s*\)/g;
 }

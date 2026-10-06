@@ -214,8 +214,13 @@ The token string is returned **only** in this response and never stored server-s
 
 ## 6. Content rules for v1 writes
 
+- `content_markdown` is limited to 200 000 characters and `content_lexical` to 2 MB of JSON; a larger
+  payload is rejected with `validation_failed` before any conversion or parsing.
 - `content_markdown` is converted Markdown → Lexical JSON (server-side, headless) → HTML.
-- `content_lexical` must be an object with `root.type === "root"` and a `children` array.
+- `content_lexical` must be an object with `root.type === "root"` and a `children` array. Every node
+  `type` must be one the editor can render; unknown types are rejected with the offending paths in
+  `details.fields.content_lexical`. The state is then parsed and re-serialized through the editor
+  (unknown fields are dropped) before URL checks and storage.
 - **URL rules** (applied to Lexical JSON from either source, before saving):
   - Image `src` and `featured_image_url`: `http(s)://…` or site-relative (`/…`). `data:` URIs are
     rejected with `validation_failed` and the hint "upload images with POST /api/v1/media first".

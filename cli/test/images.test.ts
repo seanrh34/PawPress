@@ -91,6 +91,16 @@ describe('assertLocalImagesExist', () => {
   });
 });
 
+describe('scanLocalImages performance', () => {
+  it('handles a hostile run of image markers quickly', () => {
+    const input = '!['.repeat(100_000);
+    const start = performance.now();
+    scanLocalImages(input, null, '/tmp/base');
+    const duration = performance.now() - start;
+    expect(duration).toBeLessThan(2000);
+  });
+});
+
 describe('rewriteMarkdownImages', () => {
   it('replaces only references present in the map and not in fences', () => {
     const markdown = ['![a](img/a.png)', '```', '![b](img/b.png)', '```'].join('\n');
