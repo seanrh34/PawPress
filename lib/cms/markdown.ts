@@ -22,9 +22,12 @@
  *   transformer. Alignment markers (`:--:`) are accepted on import but not
  *   persisted (Lexical 0.38 table cells have no alignment field) and the export
  *   always emits `---` separators.
- * - Inline `![alt](src)` mixed with surrounding text is not converted (the
- *   editor's image node is block-level); an image on its own line becomes an
- *   `image` node.
+ * - `image` and `youtube` are inline DecoratorNodes (Lexical 0.38's
+ *   `DecoratorNode.isInline()` returns true and neither web node overrides it),
+ *   so editor JSON places them inside paragraphs (`root > paragraph > image`).
+ *   Both are handled by TextMatchTransformers, which keeps that shape: an image
+ *   converts inline and when alone on a line (a paragraph whose only child is
+ *   the image); a YouTube URL only converts when it is the whole paragraph.
  */
 
 import { CodeHighlightNode, CodeNode } from '@lexical/code';
@@ -38,8 +41,8 @@ import {
   LINK,
   MULTILINE_ELEMENT_TRANSFORMERS,
   TEXT_FORMAT_TRANSFORMERS,
-  type ElementTransformer,
   type MultilineElementTransformer,
+  type TextMatchTransformer,
   type Transformer,
 } from '@lexical/markdown';
 import { HeadingNode, QuoteNode } from '@lexical/rich-text';
@@ -89,12 +92,14 @@ const EDITOR_NODES = [
 ];
 
 /**
- * Matches a whole line consisting of a Markdown image, e.g. `![alt](/a.png)`.
- * The editor's image node is block-level, so only whole-line images convert.
+ * `![alt](src)` -> inline `image` node. A TextMatchTransformer is used (not an
+ * element transformer) because the editor's image node is an inline
+ * DecoratorNode inserted with `$insertNodes`, so editor-shaped JSON is
+ * `root > paragraph > image`. This handles images inline among text as well as
+ * an image alone on a line (which becomes a paragraph whose only child is the
+ * image). Must run before LINK so `![...](...)` is not split into `!` + link.
  */
-const IMAGE_REG_EXP = /^[ \t]*!\[([^\]]*)\]\(\s*(\S+?)\s*\)[ \t]*$/;
-
-const IMAGE: ElementTransformer = {
+const IMAGE: TextMatchTransformer = {
   dependencies: [ServerImageNode],
   export: (node) => {
     if (!$isImageNode(node)) {
@@ -102,28 +107,32 @@ const IMAGE: ElementTransformer = {
     }
     return `![${node.__altText}](${node.__src})`;
   },
-  regExp: IMAGE_REG_EXP,
-  replace: (parentNode, _children, match) => {
+  importRegExp: /!\[([^\]]*)\]\(([^)\s]+)\)/,
+  regExp: /!\[([^\]]*)\]\(([^)\s]+)\)$/,
+  replace: (textNode, match) => {
     const [, altText, src] = match;
     if (!src) {
-      return false;
+      return;
     }
-    parentNode.replace($createImageNode({ altText, src }));
+    textNode.replace($createImageNode({ altText, src }));
   },
-  type: 'element',
+  trigger: ')',
+  type: 'text-match',
 };
 
 const YOUTUBE_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 
 /**
- * Matches a whole line that is a YouTube URL in any of the common shapes:
+ * A paragraph consisting solely of a YouTube URL in any of the common shapes:
  * youtube.com/watch?v=ID, youtu.be/ID, youtube.com/embed/ID, with optional
- * `www.`/`m.`, http/https and ignored extra query parameters.
+ * `www.`/`m.`, http/https and ignored extra query parameters. The anchor keeps
+ * embedded URLs as plain text; the replacement is inline so the result is
+ * `paragraph > youtube`, matching the editor.
  */
-const YOUTUBE_REG_EXP =
-  /^[ \t]*https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})(?:[&#?][^\s]*)?[ \t]*$/;
+const YOUTUBE_URL_REG_EXP =
+  /https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})(?:[&#?][^\s]*)?/;
 
-const YOUTUBE: ElementTransformer = {
+const YOUTUBE: TextMatchTransformer = {
   dependencies: [ServerYoutubeNode],
   export: (node) => {
     if (!$isYoutubeNode(node)) {
@@ -131,15 +140,16 @@ const YOUTUBE: ElementTransformer = {
     }
     return `https://www.youtube.com/watch?v=${node.__id}`;
   },
-  regExp: YOUTUBE_REG_EXP,
-  replace: (parentNode, _children, match) => {
+  importRegExp: new RegExp(`^[ \\t]*${YOUTUBE_URL_REG_EXP.source}[ \\t]*$`),
+  regExp: new RegExp(`${YOUTUBE_URL_REG_EXP.source}$`),
+  replace: (textNode, match) => {
     const id = match[1];
     if (!id || !YOUTUBE_ID_PATTERN.test(id)) {
-      return false;
+      return;
     }
-    parentNode.replace($createYoutubeNode({ id }));
+    textNode.replace($createYoutubeNode({ id }));
   },
-  type: 'element',
+  type: 'text-match',
 };
 
 function createParagraphWithText(text: string): ElementNode {
@@ -264,11 +274,13 @@ const TABLE: MultilineElementTransformer = {
 
 const MARKDOWN_TRANSFORMERS: Transformer[] = [
   ...ELEMENT_TRANSFORMERS,
-  IMAGE,
-  YOUTUBE,
   ...MULTILINE_ELEMENT_TRANSFORMERS,
   TABLE,
   ...TEXT_FORMAT_TRANSFORMERS,
+  // IMAGE before LINK: `![alt](src)` also matches the link pattern from the
+  // `[alt](src)` tail, and the first transformer with the earliest match wins.
+  IMAGE,
+  YOUTUBE,
   LINK,
 ];
 

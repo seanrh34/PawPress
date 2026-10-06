@@ -150,13 +150,40 @@ export const editorPostState = {
         language: 'ts',
       },
       {
-        altText: 'A cat',
-        height: 120,
-        width: 200,
-        maxWidth: 400,
-        src: 'https://example.com/cat.png',
-        type: 'image',
+        children: [
+          {
+            altText: 'A cat',
+            height: 120,
+            width: 200,
+            maxWidth: 400,
+            src: 'https://example.com/cat.png',
+            type: 'image',
+            version: 1,
+          },
+        ],
+        direction: null,
+        format: '',
+        indent: 0,
+        type: 'paragraph',
         version: 1,
+        textFormat: 0,
+        textStyle: '',
+      },
+      {
+        children: [
+          {
+            id: 'dQw4w9WgXcQ',
+            type: 'youtube',
+            version: 1,
+          },
+        ],
+        direction: null,
+        format: '',
+        indent: 0,
+        type: 'paragraph',
+        version: 1,
+        textFormat: 0,
+        textStyle: '',
       },
     ],
     direction: null,
@@ -175,4 +202,6 @@ A paragraph with **bold** and a [link](https://example.com).
 const answer = 42;
 \`\`\`
 
-![A cat](https://example.com/cat.png)`;
+![A cat](https://example.com/cat.png)
+
+https://www.youtube.com/watch?v=dQw4w9WgXcQ`;

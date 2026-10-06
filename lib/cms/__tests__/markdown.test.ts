@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHeadlessEditor } from '@lexical/headless';
+import { $createParagraphNode, $getRoot } from 'lexical';
 import type { Klass, LexicalNode, SerializedEditorState } from 'lexical';
 import { lexicalToHtml } from '@/lib/lexicalToHtml';
 import {
@@ -112,6 +113,36 @@ function buildWithNodes<T>(nodes: Klass<LexicalNode>[], fn: () => T): T {
   return result;
 }
 
+/**
+ * Builds editor JSON the way the web editor does: inline decorator nodes are
+ * `$insertNodes`-ed into paragraphs, so the shape is root > paragraph > node.
+ */
+function webEditorShapeState(): SerializedEditorState {
+  const editor = createHeadlessEditor({
+    namespace: 'web-editor-shape',
+    nodes: [WebImageNode, WebYoutubeNode],
+    onError: (error: Error) => {
+      throw error;
+    },
+  });
+  editor.update(
+    () => {
+      const root = $getRoot();
+      root.clear();
+      const imageParagraph = $createParagraphNode();
+      imageParagraph.append(
+        $createWebImageNode({ altText: 'A cat', src: '/images/cat.png' }),
+      );
+      root.append(imageParagraph);
+      const youtubeParagraph = $createParagraphNode();
+      youtubeParagraph.append($createWebYoutubeNode({ id: 'dQw4w9WgXcQ' }));
+      root.append(youtubeParagraph);
+    },
+    { discrete: true },
+  );
+  return editor.getEditorState().toJSON();
+}
+
 describe('markdownToLexical -> lexicalToMarkdown round trips', () => {
   it('preserves headings h1-h6', () => {
     expect(edgeStable(headingsMarkdown).once).toBe(headingsMarkdown);
@@ -154,6 +185,14 @@ describe('markdownToLexical -> lexicalToMarkdown round trips', () => {
 
   it('preserves images', () => {
     expect(edgeStable(imageMarkdown).once).toBe(imageMarkdown);
+  });
+
+  it('converts an image inline among text', () => {
+    const markdown = 'Before ![A cat](/a.png) after.';
+    const state = markdownToLexical(markdown);
+    const [image] = findNodeByType(state, 'image');
+    expect(image?.src).toBe('/a.png');
+    expect(lexicalToMarkdown(state)).toBe(markdown);
   });
 
   it('preserves GFM tables', () => {
@@ -237,7 +276,7 @@ describe('lexicalToHtml integration', () => {
     expect(html).toContain('<blockquote>');
     expect(html).toContain('<ol>');
     expect(html).toContain('<pre><code>');
-    expect(html).toContain('<img');
+    expect(html).toContain('<p><img');
     expect(html).toContain('<table>');
     expect(html).toContain('<div class="youtube-embed">');
     expect(html).toContain('https://www.youtube.com/embed/dQw4w9WgXcQ');
@@ -295,6 +334,22 @@ describe('server-safe node JSON matches the web editor', () => {
     const first = markdownToLexical(realisticPostMarkdown);
     const second = markdownToLexical(realisticPostMarkdown);
     expect(second).toStrictEqual(first);
+  });
+});
+
+describe('editor-shaped inline image/youtube JSON', () => {
+  it('matches markdownToLexical and exports back', async () => {
+    const editorState = webEditorShapeState();
+    const markdown = '![A cat](/images/cat.png)\n\nhttps://youtu.be/dQw4w9WgXcQ';
+
+    expect(markdownToLexical(markdown)).toStrictEqual(editorState);
+
+    const out = lexicalToMarkdown(editorState);
+    expect(out).toContain('![A cat](/images/cat.png)');
+    expect(out).toContain('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+
+    const html = await lexicalToHtml(editorState);
+    expect(html).toContain('<p><img');
   });
 });
 

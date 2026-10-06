@@ -129,6 +129,13 @@ export class ServerImageNode extends DecoratorNode<null> {
     return null;
   }
 
+  // DecoratorNode defaults to inline in Lexical 0.38; the web ImageNode does
+  // not override it either. Being explicit keeps the editor shape (root >
+  // paragraph > image) intact.
+  isInline(): true {
+    return true;
+  }
+
   createDOM(): HTMLElement {
     throw new Error('ServerImageNode.createDOM is not supported in headless mode');
   }
@@ -199,6 +206,12 @@ export class ServerYoutubeNode extends DecoratorNode<null> {
 
   decorate(): null {
     return null;
+  }
+
+  // Matches the web YoutubeNode: inline by default so it is inserted inside a
+  // paragraph (root > paragraph > youtube).
+  isInline(): true {
+    return true;
   }
 
   createDOM(): HTMLElement {
