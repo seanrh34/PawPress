@@ -28,6 +28,10 @@
  *   Both are handled by TextMatchTransformers, which keeps that shape: an image
  *   converts inline and when alone on a line (a paragraph whose only child is
  *   the image); a YouTube URL only converts when it is the whole paragraph.
+ * - Before importing, list-item indentation is normalised to four spaces per
+ *   level (outside fenced code blocks). Lexical 0.38's list importer only counts
+ *   tabs plus `floor(spaces / 4)`, which silently flattens the two-space bullet
+ *   and three-space ordered nestings that Markdown authors commonly write.
  */
 
 import { CodeHighlightNode, CodeNode } from '@lexical/code';
@@ -284,6 +288,73 @@ const MARKDOWN_TRANSFORMERS: Transformer[] = [
   LINK,
 ];
 
+const LIST_MARKER_REG_EXP = /^([ \t]*)([-*+]|\d{1,}\.)([ \t]+)/;
+const FENCE_START_REG_EXP = /^[ \t]*```/;
+const FENCE_END_REG_EXP = /^[ \t]*```[ \t]*$/;
+const SINGLE_LINE_FENCE_REG_EXP = /^[ \t]*```[^`].*```[ \t]*$/;
+
+function leadingColumns(whitespace: string): number {
+  let columns = 0;
+  for (const char of whitespace) {
+    columns += char === '\t' ? 4 : 1;
+  }
+  return columns;
+}
+
+/**
+ * Lexical 0.38's list import derives indentation as `tabs + floor(spaces / 4)`,
+ * so CommonMark's two-space (bullet) and three-space (ordered) nestings flatten.
+ * Re-emit list items using the four-space-per-level style Lexical understands.
+ *
+ * The stack holds each open list item's *original* content column (marker width
+ * plus the whitespace after it). A list line indented to at least its parent's
+ * content column is one level deeper; lower indentation pops. Fenced code blocks
+ * are passed through untouched.
+ */
+function normalizeListIndentation(markdown: string): string {
+  const lines = markdown.split('\n');
+  const output: string[] = [];
+  const stack: number[] = [];
+  let inFence = false;
+
+  for (const line of lines) {
+    if (inFence) {
+      output.push(line);
+      if (FENCE_END_REG_EXP.test(line)) {
+        inFence = false;
+      }
+      continue;
+    }
+    if (SINGLE_LINE_FENCE_REG_EXP.test(line)) {
+      output.push(line);
+      continue;
+    }
+    if (FENCE_START_REG_EXP.test(line)) {
+      inFence = true;
+      output.push(line);
+      continue;
+    }
+
+    const match = LIST_MARKER_REG_EXP.exec(line);
+    if (!match) {
+      output.push(line);
+      continue;
+    }
+
+    const [, whitespace, marker, spacing] = match;
+    const indent = leadingColumns(whitespace);
+    while (stack.length > 0 && indent < stack[stack.length - 1]) {
+      stack.pop();
+    }
+    const level = stack.length;
+    const contentColumn = indent + marker.length + leadingColumns(spacing);
+    stack.push(contentColumn);
+    output.push(`${'    '.repeat(level)}${line.slice(whitespace.length)}`);
+  }
+
+  return output.join('\n');
+}
+
 function createEditor(): LexicalEditor {
   return createHeadlessEditor({
     namespace: 'PawPressMarkdown',
@@ -295,10 +366,11 @@ function createEditor(): LexicalEditor {
 }
 
 export function markdownToLexical(markdown: string): SerializedEditorState {
+  const normalized = normalizeListIndentation(markdown);
   const editor = createEditor();
   editor.update(
     () => {
-      $convertFromMarkdownString(markdown, MARKDOWN_TRANSFORMERS);
+      $convertFromMarkdownString(normalized, MARKDOWN_TRANSFORMERS);
     },
     { discrete: true },
   );

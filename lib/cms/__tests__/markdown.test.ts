@@ -221,6 +221,52 @@ describe('markdownToLexical -> lexicalToMarkdown round trips', () => {
   });
 });
 
+describe('list indentation normalisation', () => {
+  it('normalises two-space bullet nesting', () => {
+    expect(edgeStable('- a\n  - b').once).toBe('- a\n    - b');
+  });
+
+  it('normalises three-space ordered nesting', () => {
+    expect(edgeStable('1. x\n   1. y').once).toBe('1. x\n    1. y');
+  });
+
+  it('normalises three levels of two-space bullets', () => {
+    expect(edgeStable('- a\n  - b\n    - c').once).toBe(
+      '- a\n    - b\n        - c',
+    );
+  });
+
+  it('normalises three levels of ordered nesting', () => {
+    expect(edgeStable('1. a\n   1. b\n      1. c').once).toBe(
+      '1. a\n    1. b\n        1. c',
+    );
+  });
+
+  it('normalises mixed ordered/unordered three levels', () => {
+    // Lexical 0.38 cannot nest a list of a different type directly under
+    // another (it emits them as separate top-level lists), so assert the
+    // normaliser preserved the three indentation levels rather than flattening.
+    const out = edgeStable('1. first\n   1. second\n      - third').once;
+    expect(out).toContain('1. first');
+    expect(out).toContain('    1. second');
+    expect(out).toContain('        - third');
+  });
+
+  it('keeps four-space and tab nesting working', () => {
+    expect(edgeStable('- a\n    - b').once).toBe('- a\n    - b');
+    expect(edgeStable('- a\n\t- b').once).toBe('- a\n    - b');
+  });
+
+  it('softer siblings pop back to the right level', () => {
+    expect(edgeStable('- a\n  - b\n- c').once).toBe('- a\n    - b\n- c');
+  });
+
+  it('does not touch list-looking lines inside fenced code', () => {
+    const markdown = '```text\n  - x\n    - y\n```';
+    expect(edgeStable(markdown).once).toBe(markdown);
+  });
+});
+
 describe('YouTube URLs', () => {
   it.each(youtubeUrlForms)('normalises $input', ({ input, id }) => {
     const state = markdownToLexical(input);

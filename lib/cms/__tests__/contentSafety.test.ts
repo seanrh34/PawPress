@@ -71,6 +71,10 @@ describe('isAllowedImageUrl', () => {
     'images/a.png',
     '#frag',
     '',
+    '/\\evil.com',
+    '/a b.png',
+    '/a\tb.png',
+    'https://exa mple.com',
   ])('rejects %s', (url) => {
     expect(isAllowedImageUrl(url)).toBe(false);
   });
@@ -101,6 +105,11 @@ describe('isAllowedLinkUrl', () => {
     'relative/path',
     '',
     '#',
+    '/\\evil.com',
+    '/a\\b',
+    '/a b.png',
+    'https://exa mple.com',
+    'mailto:a b@example.com',
   ])('rejects %s', (url) => {
     expect(isAllowedLinkUrl(url)).toBe(false);
   });
@@ -130,6 +139,18 @@ describe('findUnsafeUrls', () => {
       url: ' JavaScript:alert(1)',
     });
     expect(unsafe[1].reason).toContain('javascript: link URLs are not allowed');
+  });
+
+  it('rejects backslash site-relative URLs that browsers treat as protocol-relative', () => {
+    const state = makeState([
+      paragraph([imageNode('/\\evil.com/a.png'), linkNode('/\\evil.com')]),
+    ]);
+    const unsafe = findUnsafeUrls(state);
+    expect(unsafe).toHaveLength(2);
+    expect(unsafe[0].nodeType).toBe('image');
+    expect(unsafe[0].reason).toContain('backslash');
+    expect(unsafe[1].nodeType).toBe('link');
+    expect(unsafe[1].reason).toContain('backslash');
   });
 
   it('returns nothing for a safe state', () => {

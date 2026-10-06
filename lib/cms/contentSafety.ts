@@ -30,6 +30,15 @@ function schemeOf(url: string): string | null {
   return match ? match[1].toLowerCase() : null;
 }
 
+/**
+ * Browsers treat `\` like `/`, so `/\evil.com` resolves to the protocol-relative
+ * `//evil.com`. Reject backslashes and any ASCII control/whitespace character
+ * left inside the URL after the ends have been trimmed.
+ */
+function hasUnsafeChars(url: string): boolean {
+  return /[\\\u0000-\u0020\u007F]/.test(url);
+}
+
 function isHttpUrl(url: string): boolean {
   if (!/^https?:\/\//i.test(url)) {
     return false;
@@ -53,6 +62,9 @@ export function isAllowedImageUrl(url: string): boolean {
   if (trimmed === '' || trimmed.startsWith('#')) {
     return false;
   }
+  if (hasUnsafeChars(trimmed)) {
+    return false;
+  }
   if (trimmed.startsWith('//')) {
     return false;
   }
@@ -68,6 +80,9 @@ export function isAllowedLinkUrl(url: string): boolean {
   }
   const trimmed = url.trim();
   if (trimmed === '') {
+    return false;
+  }
+  if (hasUnsafeChars(trimmed)) {
     return false;
   }
   if (trimmed.startsWith('#')) {
@@ -97,6 +112,9 @@ function imageReason(url: string): string {
   if (trimmed === '') {
     return 'Image src is empty; use an http(s) URL or a site-relative path';
   }
+  if (hasUnsafeChars(trimmed)) {
+    return 'Image URL contains a backslash, whitespace or control character; use an http(s) URL or a site-relative path';
+  }
   if (trimmed.startsWith('//')) {
     return 'Protocol-relative image URLs are not allowed; use http(s) or a site-relative path starting with a single "/"';
   }
@@ -107,6 +125,9 @@ function linkReason(url: string): string {
   const trimmed = url.trim();
   if (trimmed === '') {
     return 'Link URL is empty; use http(s), mailto, a site-relative path, or a #fragment';
+  }
+  if (hasUnsafeChars(trimmed)) {
+    return 'Link URL contains a backslash, whitespace or control character; use http(s), mailto, a site-relative path, or a #fragment';
   }
   if (trimmed.startsWith('//')) {
     return 'Protocol-relative link URLs are not allowed; use http(s), mailto, a site-relative path, or a #fragment';
