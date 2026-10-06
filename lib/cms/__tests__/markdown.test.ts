@@ -13,8 +13,10 @@ import {
 } from '@/app/admin/lexical/nodes/YoutubeNode';
 import {
   ALLOWED_NODE_TYPES,
+  findDisallowedNodeTypes,
   lexicalToMarkdown,
   markdownToLexical,
+  normalizeLexicalState,
 } from '../markdown';
 import {
   ServerImageNode,
@@ -90,6 +92,31 @@ function edgeStable(markdown: string): { once: string; twice: string } {
   const once = lexicalToMarkdown(markdownToLexical(markdown));
   const twice = lexicalToMarkdown(markdownToLexical(once));
   return { once, twice };
+}
+
+/**
+ * Comparable view of an editor state that ignores re-serialization metadata
+ * (`version`, CodeNode `theme`) and treats a missing field and an explicit
+ * `null`/`undefined` as equal. Used to assert a round trip preserves structure
+ * without pinning incidental serialization details.
+ */
+function canonical(node: unknown): unknown {
+  if (Array.isArray(node)) {
+    return node.map(canonical);
+  }
+  if (node === undefined) {
+    return null;
+  }
+  if (typeof node !== 'object' || node === null) {
+    return node;
+  }
+  const record = node as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (key === 'version' || key === 'theme') continue;
+    out[key] = canonical(value);
+  }
+  return out;
 }
 
 function buildWithNodes<T>(nodes: Klass<LexicalNode>[], fn: () => T): T {
@@ -405,5 +432,85 @@ describe('empty input', () => {
     expect(isValidLexicalState(state)).toBe(true);
     expect(state.root.type).toBe('root');
     expect(lexicalToMarkdown(state)).toBe('');
+  });
+});
+
+describe('normalizeLexicalState round trip', () => {
+  it('preserves the real editor fixture structure exactly', () => {
+    const normalized = normalizeLexicalState(editorPostState);
+    expect(canonical(normalized)).toStrictEqual(canonical(editorPostState));
+    expect(lexicalToMarkdown(normalized)).toBe(
+      lexicalToMarkdown(editorPostState),
+    );
+  });
+
+  it('is idempotent for every markdown shape the importer produces', () => {
+    const inputs: Array<[string, string]> = [
+      ['headings', headingsMarkdown],
+      ['inline', inlineFormattingMarkdown],
+      ['links', linksMarkdown],
+      ['unordered list', unorderedListMarkdown],
+      ['ordered list', orderedListMarkdown],
+      ['nested list', nestedListMarkdown],
+      ['quote', blockQuoteMarkdown],
+      ['code', fencedCodeMarkdown],
+      ['image', imageMarkdown],
+      ['youtube', youtubeMarkdown],
+      ['table', tableMarkdown],
+      ['realistic', realisticPostMarkdown],
+    ];
+
+    for (const [name, markdown] of inputs) {
+      const state = markdownToLexical(markdown);
+      expect(normalizeLexicalState(state), name).toStrictEqual(state);
+    }
+  });
+
+  it('drops unknown fields while keeping the node shape', () => {
+    const state = markdownToLexical('Hello');
+    const paragraph = state.root.children[0] as unknown as Record<
+      string,
+      unknown
+    >;
+    paragraph.evil = 'drop me';
+    const normalized = normalizeLexicalState(state);
+    const normalizedParagraph = normalized.root.children[0] as unknown as Record<
+      string,
+      unknown
+    >;
+    expect(normalizedParagraph.evil).toBeUndefined();
+    expect(normalizedParagraph.type).toBe('paragraph');
+  });
+});
+
+describe('findDisallowedNodeTypes', () => {
+  it('returns nothing for allowed editor shapes', () => {
+    expect(findDisallowedNodeTypes(editorPostState)).toEqual([]);
+    expect(findDisallowedNodeTypes(markdownToLexical(realisticPostMarkdown))).toEqual([]);
+  });
+
+  it('reports the type and path of unknown nodes, including nested ones', () => {
+    const state = {
+      root: {
+        type: 'root',
+        children: [
+          { type: 'paragraph', children: [{ type: 'script', text: 'x' }] },
+          { type: 'mystery', children: [] },
+        ],
+      },
+    };
+    expect(findDisallowedNodeTypes(state)).toEqual([
+      { path: 'root.children[0].children[0]', type: 'script' },
+      { path: 'root.children[1]', type: 'mystery' },
+    ]);
+  });
+
+  it('reports a missing type as (missing)', () => {
+    const state = {
+      root: { type: 'root', children: [{ children: [] }] },
+    };
+    expect(findDisallowedNodeTypes(state)).toEqual([
+      { path: 'root.children[0]', type: '(missing)' },
+    ]);
   });
 });

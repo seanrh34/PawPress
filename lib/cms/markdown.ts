@@ -385,6 +385,56 @@ export function lexicalToMarkdown(state: SerializedEditorState): string {
     .read(() => $convertToMarkdownString(MARKDOWN_TRANSFORMERS));
 }
 
+export interface DisallowedNodeType {
+  path: string;
+  type: string;
+}
+
+/**
+ * Walks a candidate editor state and reports every node whose `type` is not one
+ * of the editor's registered nodes. Used to reject hostile v1 `content_lexical`
+ * with a precise error before it is parsed.
+ */
+export function findDisallowedNodeTypes(state: unknown): DisallowedNodeType[] {
+  const out: DisallowedNodeType[] = [];
+
+  const walk = (node: unknown, path: string): void => {
+    if (typeof node !== 'object' || node === null) {
+      return;
+    }
+    const record = node as Record<string, unknown>;
+    const type = record.type;
+    if (typeof type !== 'string' || !ALLOWED_NODE_TYPES.has(type)) {
+      out.push({ path, type: typeof type === 'string' ? type : '(missing)' });
+    }
+    if (Array.isArray(record.children)) {
+      record.children.forEach((child, index) => {
+        walk(child, `${path}.children[${index}]`);
+      });
+    }
+  };
+
+  if (typeof state === 'object' && state !== null) {
+    walk((state as Record<string, unknown>).root, 'root');
+  }
+
+  return out;
+}
+
+/**
+ * Round-trips a serialized editor state through a fresh headless editor using
+ * the same node list as the Markdown importer/exporter. Unknown fields are
+ * dropped and every node is re-serialized by its own `exportJSON()`, giving a
+ * canonical, editor-shaped state. Throws if the state cannot be parsed.
+ */
+export function normalizeLexicalState(
+  state: SerializedEditorState,
+): SerializedEditorState {
+  const editor = createEditor();
+  editor.setEditorState(editor.parseEditorState(state));
+  return editor.getEditorState().toJSON();
+}
+
 /**
  * The node types the web editor is able to render. Exported for content-safety
  * and tests so the pipeline can assert it never emits anything else.

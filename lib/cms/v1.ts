@@ -10,7 +10,7 @@ import {
   type CategoryRow,
   resolveCategory,
 } from './categoryService';
-import { markdownToLexical, lexicalToMarkdown } from './markdown';
+import { markdownToLexical, lexicalToMarkdown, findDisallowedNodeTypes, normalizeLexicalState } from './markdown';
 import { ApiError } from './errors';
 import { getPostById, type PostCategory, type PostRow } from './postService';
 import { MAX_SLUG_LENGTH } from './slug';
@@ -309,9 +309,38 @@ export function resolveLexicalContent(
     });
   }
 
+  // Size limit first: never JSON-stringify/parse an unbounded payload.
   assertContentSize(value);
-  assertSafeContent(value);
-  return value;
+
+  // Reject anything the web editor cannot render before handing it to Lexical.
+  const disallowed = findDisallowedNodeTypes(value);
+  if (disallowed.length > 0) {
+    throw ApiError.validation('content_lexical contains unsupported nodes', {
+      fields: {
+        content_lexical: disallowed.map(
+          (node) => `Unsupported node type "${node.type}" at ${node.path}`,
+        ),
+      },
+      disallowed_nodes: disallowed,
+    });
+  }
+
+  // Canonicalise: parse through the editor's own nodes so unknown fields are
+  // dropped and every node is re-serialized by its exportJSON().
+  let normalized: SerializedEditorState;
+  try {
+    normalized = normalizeLexicalState(value);
+  } catch (error) {
+    console.error('Failed to normalize content_lexical:', error);
+    throw ApiError.validation('content_lexical is not a valid editor state', {
+      fields: {
+        content_lexical: ['Must be a serialized Lexical editor state'],
+      },
+    });
+  }
+
+  assertSafeContent(normalized);
+  return normalized;
 }
 
 export function assertFeaturedImageUrl(
