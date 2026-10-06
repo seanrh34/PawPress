@@ -14,8 +14,10 @@ import {
 import {
   ALLOWED_NODE_TYPES,
   findDisallowedNodeTypes,
+  findOversizedMarkdownBlock,
   lexicalToMarkdown,
   markdownToLexical,
+  MAX_MARKDOWN_BLOCK_CHARS,
   normalizeLexicalState,
 } from '../markdown';
 import {
@@ -432,6 +434,47 @@ describe('empty input', () => {
     expect(isValidLexicalState(state)).toBe(true);
     expect(state.root.type).toBe('root');
     expect(lexicalToMarkdown(state)).toBe('');
+  });
+});
+
+describe('markdown block limit', () => {
+  it('allows a block exactly at the limit', () => {
+    expect(() =>
+      markdownToLexical('a'.repeat(MAX_MARKDOWN_BLOCK_CHARS)),
+    ).not.toThrow();
+  });
+
+  it('rejects a block over the limit with a clear error', () => {
+    expect(() =>
+      markdownToLexical('a'.repeat(MAX_MARKDOWN_BLOCK_CHARS + 1)),
+    ).toThrow(/a paragraph exceeds \d+ characters/);
+  });
+
+  it('counts consecutive non-blank lines as a single block', () => {
+    const doc = Array.from({ length: 3 }, () => 'a'.repeat(4000)).join('\n');
+    expect(findOversizedMarkdownBlock(doc)).not.toBeNull();
+  });
+
+  it('resets the block count at blank lines', () => {
+    const doc = Array.from({ length: 3 }, () => 'a'.repeat(4000)).join('\n\n');
+    expect(findOversizedMarkdownBlock(doc)).toBeNull();
+  });
+
+  it('exempts backtick and tilde fenced code blocks', () => {
+    const body = 'a'.repeat(MAX_MARKDOWN_BLOCK_CHARS * 5);
+    expect(findOversizedMarkdownBlock('```\n' + body + '\n```')).toBeNull();
+    expect(findOversizedMarkdownBlock('~~~\n' + body + '\n~~~')).toBeNull();
+    expect(() => markdownToLexical('```\n' + body + '\n```')).not.toThrow();
+  });
+
+  it('treats a single-line fence as self-contained', () => {
+    expect(findOversizedMarkdownBlock('```' + 'a'.repeat(100) + '```')).toBeNull();
+  });
+
+  it('still rejects an oversized paragraph after a fenced block', () => {
+    const doc =
+      '```\n' + 'a'.repeat(MAX_MARKDOWN_BLOCK_CHARS * 2) + '\n```\n\n' + 'b'.repeat(MAX_MARKDOWN_BLOCK_CHARS + 1);
+    expect(findOversizedMarkdownBlock(doc)).toBe(MAX_MARKDOWN_BLOCK_CHARS + 1);
   });
 });
 

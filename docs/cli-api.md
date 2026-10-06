@@ -219,7 +219,10 @@ The token string is returned **only** in this response and never stored server-s
 ## 6. Content rules for v1 writes
 
 - `content_markdown` is limited to 200 000 characters and `content_lexical` to 2 MB of JSON; a larger
-  payload is rejected with `validation_failed` before any conversion or parsing.
+  payload is rejected with `validation_failed` before any conversion or parsing. In addition, a
+  single text block — a run of consecutive non-blank lines — may not exceed 10 000 characters
+  (fenced code blocks are exempt); a larger block is rejected with `validation_failed` and the
+  message "a paragraph exceeds 10000 characters".
 - `content_markdown` is converted Markdown → Lexical JSON (server-side, headless) → HTML.
 - `content_lexical` must be an object with `root.type === "root"` and a `children` array. Every node
   `type` must be one the editor can render; unknown types are rejected with the offending paths in

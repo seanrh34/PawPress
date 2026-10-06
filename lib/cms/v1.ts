@@ -10,7 +10,7 @@ import {
   type CategoryRow,
   resolveCategory,
 } from './categoryService';
-import { markdownToLexical, lexicalToMarkdown, findDisallowedNodeTypes, normalizeLexicalState } from './markdown';
+import { markdownToLexical, lexicalToMarkdown, findDisallowedNodeTypes, normalizeLexicalState, MarkdownBlockTooLongError } from './markdown';
 import { ApiError } from './errors';
 import { getPostById, type PostCategory, type PostRow } from './postService';
 import { MAX_SLUG_LENGTH } from './slug';
@@ -279,6 +279,34 @@ function assertSafeContent(state: SerializedEditorState): void {
 }
 
 /**
+ * Converts v1 markdown to a Lexical state, mapping the known failure modes to
+ * `validation_failed`. Never logs the error: it can embed submitted content.
+ */
+function convertMarkdown(markdown: string): SerializedEditorState {
+  try {
+    return markdownToLexical(markdown);
+  } catch (error) {
+    if (error instanceof MarkdownBlockTooLongError) {
+      throw ApiError.validation(error.message, {
+        fields: { content_markdown: [error.message] },
+      });
+    }
+    if (error instanceof RangeError) {
+      throw ApiError.validation('content_markdown is too complex to convert', {
+        fields: {
+          content_markdown: [
+            'Markdown is too repetitive or deeply nested to convert',
+          ],
+        },
+      });
+    }
+    throw ApiError.validation('content_markdown could not be converted', {
+      fields: { content_markdown: ['Invalid markdown content'] },
+    });
+  }
+}
+
+/**
  * Resolves the single content field from a v1 body into a Lexical editor state.
  * Markdown is converted server-side; a conversion failure is a validation
  * error. URLs are checked before the state is ever handed to a write.
@@ -287,15 +315,7 @@ export function resolveLexicalContent(
   input: ContentInput,
 ): SerializedEditorState {
   if (input.content_markdown !== undefined) {
-    let state: SerializedEditorState;
-    try {
-      state = markdownToLexical(input.content_markdown);
-    } catch (error) {
-      console.error('Failed to convert markdown content:', error);
-      throw ApiError.validation('content_markdown could not be converted', {
-        fields: { content_markdown: ['Invalid markdown content'] },
-      });
-    }
+    const state = convertMarkdown(input.content_markdown);
     assertSafeContent(state);
     return state;
   }
@@ -330,8 +350,16 @@ export function resolveLexicalContent(
   let normalized: SerializedEditorState;
   try {
     normalized = normalizeLexicalState(value);
-  } catch {
-    // Do not log the error: it can embed submitted content.
+  } catch (error) {
+    // Do not log the error: it can embed submitted content. A RangeError
+    // (stack overflow on deeply nested input) is still a bad-input problem.
+    if (error instanceof RangeError) {
+      throw ApiError.validation('content_lexical is too deeply nested', {
+        fields: {
+          content_lexical: ['Editor state is too deeply nested to convert'],
+        },
+      });
+    }
     throw ApiError.validation('content_lexical is not a valid editor state', {
       fields: {
         content_lexical: ['Must be a serialized Lexical editor state'],

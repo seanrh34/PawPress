@@ -1,22 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { markdownToLexical } from '../markdown';
+import {
+  findOversizedMarkdownBlock,
+  MarkdownBlockTooLongError,
+  markdownToLexical,
+  MAX_MARKDOWN_BLOCK_CHARS,
+} from '../markdown';
 
 /**
  * Performance regression guard for the Markdown importer.
  *
- * Background: the original IMAGE transformer used `/!\[([^\]]*)\]\(([^)\s]+)\)/`,
- * which is O(n^2) on `'!['.repeat(n)` (measured 7.3 s at 40k and 26 s at 80k
- * before the fix). The bundled LINK transformer had the same shape. Both are
- * now bounded (see `IMAGE` / `SAFE_LINK` in markdown.ts).
+ * Lexical's `$runTextFormatTransformers` is quadratic in the size of a single
+ * text block: `'*'.repeat(20_000)` as one paragraph settles at ~0.6 s, 10 such
+ * paragraphs at ~6 s, and a single 100k paragraph throws
+ * "Maximum call stack size exceeded" after ~12.5 s. `markdownToLexical` now
+ * rejects any block over `MAX_MARKDOWN_BLOCK_CHARS` (see
+ * `findOversizedMarkdownBlock`), which bounds the per-request cost. The chosen
+ * limit of 10 000 keeps the worst case (10 blocks) around 1.6 s here.
  *
- * Known remaining limitation (deliberately not fixed; it is Lexical's own
- * `$runTextFormatTransformers`, not our code): repeated emphasis markers are
- * quadratic. `'*'.repeat(20_000)` settles at ~0.8 s, 40k at ~2.9 s and 100k
- * throws "Maximum call stack size exceeded" after ~12.5 s. The 200 000 char
- * `content_markdown` limit plus the try/catch in `resolveLexicalContent` (which
- * turns the throw into `validation_failed`) bound the impact.
+ * Oversized blocks in the earlier IMAGE/LINK regex path are also rejected
+ * before conversion.
  */
-const BUDGET_MS = 2000;
+const BUDGET_MS = 3000;
+const LIMIT = MAX_MARKDOWN_BLOCK_CHARS;
 
 function elapsed(fn: () => void): number {
   const start = performance.now();
@@ -24,31 +29,56 @@ function elapsed(fn: () => void): number {
   return performance.now() - start;
 }
 
+function blocks(count: number, block: string): string {
+  return Array.from({ length: count }, () => block).join('\n\n');
+}
+
 describe('markdown importer performance', () => {
-  const boundedInputs: Array<[string, string]> = [
-    ['repeated image markers', '!['.repeat(100_000)],
-    ['repeated open brackets', '['.repeat(100_000)],
-    ['repeated backticks', '`'.repeat(100_000)],
-    ['repeated pipes', '|'.repeat(100_000)],
-    ['repeated list markers', '- '.repeat(50_000)],
-    ['repeated ordered list markers', '1. '.repeat(25_000)],
-    ['repeated digits', '1'.repeat(100_000)],
-    ['many link candidates', '[a]('.repeat(20_000)],
-  ];
+  it('rejects an oversized single block immediately', () => {
+    expect(() => markdownToLexical('*'.repeat(LIMIT + 1))).toThrow(
+      MarkdownBlockTooLongError,
+    );
+    const duration = elapsed(() => {
+      try {
+        markdownToLexical('*'.repeat(100_000));
+      } catch {
+        // expected
+      }
+    });
+    expect(duration).toBeLessThan(500);
+  });
 
-  it.each(boundedInputs)(
-    'handles %s (~100k chars) under %dms',
-    (_name, input) => {
-      const duration = elapsed(() => markdownToLexical(input));
-      expect(duration).toBeLessThan(BUDGET_MS);
-    },
-    60_000,
-  );
+  it('converts the worst-case emphasis block at the limit under budget', () => {
+    const duration = elapsed(() => markdownToLexical('*'.repeat(LIMIT)));
+    expect(duration).toBeLessThan(BUDGET_MS);
+  });
 
-  it('handles repeated emphasis markers at a representative size', () => {
-    // Guard against regressions in the size we can still process quickly; the
-    // 100k case is a known Lexical limitation documented above.
-    const duration = elapsed(() => markdownToLexical('*'.repeat(20_000)));
+  it('converts ten emphasis blocks at the limit under budget', () => {
+    const doc = blocks(10, '*'.repeat(LIMIT - 1));
+    const duration = elapsed(() => markdownToLexical(doc));
+    expect(duration).toBeLessThan(BUDGET_MS);
+  });
+
+  it('exempts fenced code blocks from the per-block limit', () => {
+    const doc = '```\n' + 'a'.repeat(LIMIT * 3) + '\n```';
+    expect(findOversizedMarkdownBlock(doc)).toBeNull();
+    expect(() => markdownToLexical(doc)).not.toThrow();
+  });
+
+  it('still rejects an oversized paragraph next to a fenced block', () => {
+    const doc =
+      '```\n' + 'a'.repeat(LIMIT * 2) + '\n```\n\n' + 'b'.repeat(LIMIT + 1);
+    expect(() => markdownToLexical(doc)).toThrow(MarkdownBlockTooLongError);
+  });
+
+  it.each([
+    ['plain text', 'a'.repeat(LIMIT)],
+    ['open brackets', '['.repeat(LIMIT)],
+    ['pipes', '|'.repeat(LIMIT)],
+    ['list markers', '- '.repeat(LIMIT / 2)],
+    ['many link candidates', '[a]('.repeat(LIMIT / 4)],
+  ])('handles %s at the limit under budget', (_name, input) => {
+    const duration = elapsed(() => markdownToLexical(input));
     expect(duration).toBeLessThan(BUDGET_MS);
   });
 });

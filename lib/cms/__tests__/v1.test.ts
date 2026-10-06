@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { SerializedEditorState } from 'lexical';
 import { ApiError } from '../errors';
-import { lexicalToMarkdown, markdownToLexical } from '../markdown';
+import {
+  lexicalToMarkdown,
+  markdownToLexical,
+  MAX_MARKDOWN_BLOCK_CHARS,
+} from '../markdown';
 import { MAX_LEXICAL_BYTES, resolveLexicalContent } from '../v1';
 import { editorPostState } from './fixtures/editorState';
 
@@ -162,5 +166,34 @@ describe('resolveLexicalContent', () => {
   it('accepts a valid state built from markdown', () => {
     const resolved = resolve({ content_lexical: markdownToLexical('# Hi') });
     expect(resolved.root.children[0]).toMatchObject({ type: 'heading', tag: 'h1' });
+  });
+});
+
+describe('resolveLexicalContent markdown block limit', () => {
+  function resolveMarkdown(markdown: string) {
+    return resolveLexicalContent({ content_markdown: markdown });
+  }
+
+  it('rejects an oversized paragraph with a clear message', () => {
+    const error = (() => {
+      try {
+        resolveMarkdown('a'.repeat(MAX_MARKDOWN_BLOCK_CHARS + 1));
+        return null;
+      } catch (caught) {
+        return caught as ApiError;
+      }
+    })();
+    expect(error?.code).toBe('validation_failed');
+    const fields = (error?.details as { fields: Record<string, string[]> }).fields;
+    expect(fields.content_markdown[0]).toMatch(
+      /a paragraph exceeds \d+ characters/,
+    );
+  });
+
+  it('accepts a fenced code block larger than the block limit', () => {
+    const resolved = resolveMarkdown(
+      '```\n' + 'a'.repeat(MAX_MARKDOWN_BLOCK_CHARS * 5) + '\n```',
+    );
+    expect(resolved.root.type).toBe('root');
   });
 });

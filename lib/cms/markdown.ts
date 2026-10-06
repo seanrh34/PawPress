@@ -384,7 +384,105 @@ function createEditor(): LexicalEditor {
   });
 }
 
+/**
+ * Maximum characters in a single top-level text block (a run of consecutive
+ * non-blank lines) outside fenced code blocks. Lexical's text-format importer
+ * is quadratic in the size of one block, so this bounds the worst case per
+ * request. See `findOversizedMarkdownBlock`.
+ */
+export const MAX_MARKDOWN_BLOCK_CHARS = 10_000;
+
+export class MarkdownBlockTooLongError extends Error {
+  readonly length: number;
+
+  constructor(length: number) {
+    super(`a paragraph exceeds ${MAX_MARKDOWN_BLOCK_CHARS} characters`);
+    this.name = 'MarkdownBlockTooLongError';
+    this.length = length;
+  }
+}
+
+interface FenceMatch {
+  char: string;
+  length: number;
+  selfClosed: boolean;
+}
+
+function matchFence(line: string): FenceMatch | null {
+  const match = /^[ \t]*(`{3,}|~{3,})(.*)$/.exec(line);
+  if (!match) {
+    return null;
+  }
+  const marker = match[1];
+  const rest = match[2];
+  const char = marker[0];
+  const length = marker.length;
+  // A single-line fence such as ```code``` does not open a block.
+  const closing = new RegExp('^.*?' + char + '{' + length + ',}[ \\t]*$');
+  return { char, length, selfClosed: rest !== '' && closing.test(rest) };
+}
+
+/**
+ * Returns the length of the first top-level text block longer than `limit`, or
+ * null when every block is within the limit. Fenced code blocks (```/~~~) are
+ * exempt; they are still bounded by the overall `content_markdown` limit.
+ */
+export function findOversizedMarkdownBlock(
+  markdown: string,
+  limit: number = MAX_MARKDOWN_BLOCK_CHARS,
+): number | null {
+  const lines = markdown.split('\n');
+  let fence: FenceMatch | null = null;
+  let blockLength = 0;
+
+  for (const line of lines) {
+    if (fence) {
+      const close = /^[ \t]*(`{3,}|~{3,})[ \t]*$/.exec(line);
+      if (
+        close &&
+        close[1][0] === fence.char &&
+        close[1].length >= fence.length
+      ) {
+        fence = null;
+      }
+      continue;
+    }
+
+    const candidate = matchFence(line);
+    if (candidate) {
+      if (blockLength > limit) {
+        return blockLength;
+      }
+      blockLength = 0;
+      if (!candidate.selfClosed) {
+        fence = candidate;
+      }
+      continue;
+    }
+
+    if (line.trim() === '') {
+      if (blockLength > limit) {
+        return blockLength;
+      }
+      blockLength = 0;
+      continue;
+    }
+
+    if (blockLength > 0) {
+      blockLength += 1;
+    }
+    blockLength += line.length;
+  }
+
+  return blockLength > limit ? blockLength : null;
+}
+
 export function markdownToLexical(markdown: string): SerializedEditorState {
+  const oversized = findOversizedMarkdownBlock(markdown);
+  if (oversized !== null) {
+    throw new MarkdownBlockTooLongError(oversized);
+  }
+
   const normalized = normalizeListIndentation(markdown);
   const editor = createEditor();
   editor.update(

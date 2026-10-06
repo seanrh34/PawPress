@@ -137,6 +137,10 @@ only), ordered/unordered/nested lists, block quotes, fenced code blocks with a l
 tables, and YouTube embeds: put a YouTube URL alone on its own line. Raw HTML and horizontal rules
 aren't supported. Use `posts get <id> --format lexical` if you need the exact editor JSON.
 
+A single text block (a run of consecutive non-blank lines, i.e. one paragraph) must be at most
+10 000 characters. Fenced code blocks are exempt. Larger paragraphs are rejected with exit 6
+("a paragraph exceeds 10000 characters"), so split very long text with blank lines.
+
 ## 3. Command reference
 
 ```
