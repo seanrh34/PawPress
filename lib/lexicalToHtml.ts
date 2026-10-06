@@ -1,4 +1,27 @@
-import { SerializedEditorState, SerializedLexicalNode } from 'lexical';
+import { SerializedEditorState } from 'lexical';
+
+/**
+ * Loose shape for serialized Lexical nodes: this converter is deliberately
+ * tolerant of any node type and only reads the fields it needs.
+ */
+interface SerializedNodeLike {
+  type?: string;
+  text?: string;
+  format?: number;
+  tag?: string;
+  listType?: string;
+  url?: string;
+  target?: string | null;
+  rel?: string | null;
+  src?: string;
+  altText?: string;
+  width?: string | number;
+  height?: string | number;
+  id?: string;
+  videoID?: string;
+  headerState?: number;
+  children?: SerializedNodeLike[];
+}
 
 /**
  * Escape HTML special characters
@@ -43,7 +66,7 @@ function applyTextFormat(text: string, format?: number): string {
 /**
  * Convert a single Lexical node to HTML
  */
-function nodeToHtml(node: any): string {
+function nodeToHtml(node: SerializedNodeLike): string {
   const type = node.type;
   
   // Text node
@@ -91,7 +114,7 @@ function nodeToHtml(node: any): string {
   
   // Code block
   if (type === 'code') {
-    const children = node.children?.map((child: any) => {
+    const children = node.children?.map((child: SerializedNodeLike) => {
       if (child.type === 'text') {
         return escapeHtml(child.text || '');
       }
@@ -120,7 +143,9 @@ function nodeToHtml(node: any): string {
   
   // YouTube embed
   if (type === 'youtube') {
-    const videoId = escapeHtml(node.videoID || '');
+    // The editor's YoutubeNode serializes the id as `id`; keep `videoID` as a
+    // fallback for any previously stored content.
+    const videoId = escapeHtml(node.id || node.videoID || '');
     return `<div class="youtube-embed"><iframe width="560" height="315" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
   }
   
