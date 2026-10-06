@@ -102,6 +102,27 @@ describe('secret hygiene', () => {
     );
   });
 
+  it('does not corrupt JSON by redacting short header values', async () => {
+    const env = {
+      ...ENV,
+      PAWPRESS_HEADERS: `x-vercel-set-bypass-cookie: true\nx-vercel-protection-bypass: ${BYPASS}`,
+    };
+    const harness = makeFetch(() => response(200, { items: [], total: 0, active: true }));
+    const out: string[] = [];
+    const err: string[] = [];
+    const h = makeHarness({
+      env,
+      fetch: harness.fetch,
+      stdout: (s) => out.push(s),
+      stderr: (s) => err.push(s),
+    });
+    expect(await h.run(['posts', 'list', '--json'])).toBe(0);
+    const parsed = JSON.parse(out.join('')) as { active: boolean };
+    expect(parsed.active).toBe(true);
+    expect(out.join('')).not.toContain(BYPASS);
+    expect(err.join('')).not.toContain(BYPASS);
+  });
+
   it('never leaks the token read from stdin during auth login', async () => {
     const dir = await makeTempDir();
     const out: string[] = [];
