@@ -1,47 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getAuthenticatedSupabaseClient } from '@/lib/supabase-server';
-import { lexicalToHtml } from '@/lib/lexicalToHtml';
 import { processAndUploadImages } from '@/lib/uploadImages';
 import { getUser } from '@/lib/auth';
+import { ApiError, toLegacyResponse } from '@/lib/cms/errors';
+import { createPost } from '@/lib/cms/postService';
 
 // GET all posts
 export async function GET() {
   try {
     // Check if user is authenticated
     const user = await getUser();
-    
-    let data, error;
-    
-    if (user) {
-      // Authenticated users (admins) can see all posts including drafts
-      const authSupabase = await getAuthenticatedSupabaseClient();
-      const result = await authSupabase
-        .from('posts')
-        .select('*')
-        .order('created_at', { ascending: false });
-      data = result.data;
-      error = result.error;
-    } else {
-      // Public users can only see published posts
-      const result = await supabase
-        .from('posts')
-        .select('*')
-        .order('created_at', { ascending: false });
-      data = result.data;
-      error = result.error;
-    }
+
+    // Authenticated users (admins) can see all posts including drafts; the
+    // anonymous client only sees published posts (enforced by RLS).
+    const db = user ? await getAuthenticatedSupabaseClient() : supabase;
+
+    const { data, error } = await db
+      .from('posts')
+      .select('*')
+      .order('created_at', { ascending: false });
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      throw ApiError.internal(error.message);
     }
 
     return NextResponse.json(data);
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch posts' },
-      { status: 500 }
-    );
+    if (error instanceof ApiError) {
+      return toLegacyResponse(error);
+    }
+    console.error('Failed to fetch posts:', error);
+    return NextResponse.json({ error: 'Failed to fetch posts' }, { status: 500 });
   }
 }
 
@@ -50,60 +40,16 @@ export async function POST(request: NextRequest) {
   // Check authentication
   const user = await getUser();
   if (!user) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
     const body = await request.json();
-    let { title, slug, content_lexical, excerpt, featured_image_url, published_at, category_id } = body;
-
-    // Validate required fields
-    if (!title || !slug) {
-      return NextResponse.json(
-        { error: 'Title and slug are required' },
-        { status: 400 }
-      );
-    }
-
-    // Check for reserved slugs
-    const reservedSlugs = ['admin', 'api', 'category', 'posts', 'styles'];
-    if (reservedSlugs.includes(slug)) {
-      return NextResponse.json(
-        { error: 'This slug is reserved and cannot be used' },
-        { status: 400 }
-      );
-    }
-
-    // Validate category_id is provided
-    if (!category_id) {
-      return NextResponse.json(
-        { error: 'Category is required' },
-        { status: 400 }
-      );
-    }
-
-    // Verify category exists
-    const { data: category, error: categoryError } = await supabase
-      .from('categories')
-      .select('id')
-      .eq('id', category_id)
-      .single();
-
-    if (categoryError || !category) {
-      return NextResponse.json(
-        { error: 'Invalid category' },
-        { status: 400 }
-      );
-    }
+    let { content_lexical } = body;
 
     // Process base64 images: upload to Supabase and replace with permanent URLs
     if (content_lexical) {
       try {
-        console.log("content_lexical:", content_lexical);
-        console.log("content_lexical.root.children:", content_lexical.root.children);
         content_lexical = await processAndUploadImages(content_lexical);
       } catch (error) {
         console.error('Error processing images:', error);
@@ -111,60 +57,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate HTML from Lexical JSON
-    let content_html = '';
-    if (content_lexical) {
-      try {
-        content_html = await lexicalToHtml(content_lexical);
-        console.log('HTML conversion successful, length:', content_html.length);
-      } catch (error) {
-        console.error('Error converting Lexical to HTML:', error);
-        console.error('Error details:', error instanceof Error ? error.message : 'Unknown error');
-        console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-        // Return error instead of continuing with empty HTML
-        return NextResponse.json(
-          { error: 'Failed to convert content to HTML. Please try again.' },
-          { status: 500 }
-        );
-      }
-    }
-
     // Use authenticated client for admin operations
     const authSupabase = await getAuthenticatedSupabaseClient();
-    
-    const { data, error } = await authSupabase
-      .from('posts')
-      .insert([
-        {
-          title,
-          slug,
-          content_lexical: content_lexical || null,
-          content_html,
-          excerpt: excerpt || '',
-          featured_image_url: featured_image_url || null,
-          published_at: published_at || null,
-          category_id,
-        },
-      ])
-      .select()
-      .single();
 
-    if (error) {
-      // Check for unique constraint violation
-      if (error.code === '23505') {
-        return NextResponse.json(
-          { error: 'A post with this slug already exists' },
-          { status: 409 }
-        );
-      }
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    const data = await createPost(authSupabase, {
+      title: body.title,
+      slug: body.slug,
+      excerpt: body.excerpt,
+      category_id: body.category_id,
+      featured_image_url: body.featured_image_url,
+      content_lexical,
+      published_at: body.published_at,
+    });
 
     return NextResponse.json(data, { status: 201 });
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to create post' },
-      { status: 500 }
-    );
+    if (error instanceof ApiError) {
+      return toLegacyResponse(error);
+    }
+    console.error('Failed to create post:', error);
+    return NextResponse.json({ error: 'Failed to create post' }, { status: 500 });
   }
 }
