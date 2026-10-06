@@ -125,7 +125,13 @@ export async function getTokenAuth(
       tokenId: verified.tokenId,
       db: admin,
     };
-  } catch {
+  } catch (error) {
+    // Expected auth failures are already ApiErrors. Anything else (e.g. a
+    // Supabase outage) still fails closed, but is logged so it isn't silently
+    // reported as a bad token. Never log the request or token.
+    if (!(error instanceof ApiError)) {
+      console.error('Token authentication failed unexpectedly:', error);
+    }
     throw UNAUTHORIZED();
   }
 }
