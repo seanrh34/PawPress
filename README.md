@@ -12,6 +12,7 @@ A modern, full-featured blog CMS built with Next.js 15, TypeScript, Lexical Edit
 - 🎨 **Clean URLs**: SEO-friendly URLs (`domain.com/[post-slug]` and `domain.com/category/[category-slug]`)
 - 🚀 **Server Components**: Leveraging Next.js 15 App Router for optimal performance
 - 🔍 **SEO Optimized**: Dynamic metadata generation for all pages
+- 🤖 **CLI & AI agents**: Token-authenticated API and a `pawpress` CLI for managing content from the terminal or an AI agent
 
 ## Tech Stack
 
@@ -37,6 +38,9 @@ Create a `.env.local` file in the root directory with the following variables:
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SECRET_KEY=your_supabase_secret_key
+# Signs CLI/API personal access tokens. At least 32 random bytes, e.g. `openssl rand -base64 48`.
+# Optional: without it, the CLI/API token auth is disabled (the web admin still works).
+PAWPRESS_TOKEN_SECRET=your_random_secret
 ```
 
 ## Database Setup
@@ -105,37 +109,25 @@ CREATE POLICY "Allow authenticated full access to posts" ON posts
   FOR ALL USING (auth.role() = 'authenticated');
 ```
 
-### 3. Create Users Table (for admin authentication)
+### 3. Admin Users (Supabase Auth + `user_profiles`)
 
-```sql
-CREATE TABLE users (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  email TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'admin' CHECK (role IN ('master', 'admin')),
-  display_name TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+Admins sign in with **Supabase Auth** (email + password); there is no password table in the app
+database. Each admin also needs a row in a `user_profiles` table, which holds their role:
 
--- Add index for email lookups
-CREATE INDEX idx_users_email ON users(email);
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | primary key, the Supabase Auth user id (`auth.users.id`) |
+| `email` | text | |
+| `role` | text | `master` or `admin` |
+| `created_by` | uuid | the master who created the account (nullable) |
+| `created_at`, `updated_at` | timestamptz | |
 
--- Enable RLS
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+Display names are stored in the Auth user's `user_metadata.display_name`. Login is refused for Auth
+users without a profile row. The `master` account can create and delete admins from `/admin/users`
+(via the Supabase Admin API, which needs `SUPABASE_SECRET_KEY`).
 
--- Only authenticated users can read user data
-CREATE POLICY "Allow authenticated read access to users" ON users
-  FOR SELECT USING (auth.role() = 'authenticated');
-
--- Only authenticated users can update their own profile
-CREATE POLICY "Allow users to update own profile" ON users
-  FOR UPDATE USING (auth.role() = 'authenticated');
-
--- Only master role can insert/delete users
-CREATE POLICY "Allow master to manage users" ON users
-  FOR ALL USING (auth.role() = 'authenticated');
-```
+Enable RLS on `user_profiles` so profiles are only readable by authenticated users. See
+[`docs/SUPABASE_FOLLOWUPS.md`](docs/SUPABASE_FOLLOWUPS.md) for recommended role-aware policies.
 
 ### 4. Create Storage Bucket for Images
 
@@ -173,17 +165,16 @@ VALUES ('Uncategorized', 'uncategorized', 'Posts that have not been categorized 
 
 ### 6. Create Your First Admin User
 
+1. In the Supabase Dashboard, go to **Authentication → Users → Add user** and create a user with an
+   email and password (auto-confirm it).
+2. Insert their profile with the `master` role, using the new user's id:
+
 ```sql
--- Replace 'your-email@example.com' and hash your password using bcrypt
--- You can use: https://bcrypt-generator.com/ with 10 rounds
-INSERT INTO users (email, password_hash, role, display_name)
-VALUES (
-  'your-email@example.com',
-  '$2a$10$YourHashedPasswordHere',
-  'master',
-  'Admin Name'
-);
+INSERT INTO user_profiles (id, email, role)
+VALUES ('<auth-user-uuid>', 'your-email@example.com', 'master');
 ```
+
+3. Disable public sign-ups (**Authentication → Sign In / Providers**). Further admins are created from `/admin/users`.
 
 ### 7. (Optional) Add Update Timestamp Triggers
 
@@ -286,7 +277,7 @@ lib/
 
 ### Reserved Slugs
 
-The following slugs are reserved and cannot be used for posts:
+The following slugs are reserved and cannot be used for posts or categories:
 - `admin`
 - `api`
 - `category`
@@ -323,6 +314,33 @@ The following slugs are reserved and cannot be used for posts:
 - `PUT /api/category/[id]` - Update a category
 - `DELETE /api/category/[id]` - Delete a category (blocked if posts exist)
 
+### API v1 (token-authenticated, used by the CLI)
+
+`/api/v1/*` uses personal access tokens with scopes instead of the browser session. See
+[`docs/cli-api.md`](docs/cli-api.md) for the full contract.
+
+## CLI & AI agents
+
+The `pawpress` CLI (in [`cli/`](cli/)) lets you and your AI agents manage posts, categories, and
+images from the terminal, using Markdown files with front matter.
+
+1. Set `PAWPRESS_TOKEN_SECRET` on the server.
+2. Create a token at `/admin/tokens`. For agents, `posts:read`, `posts:write`, and `media:upload` let
+   them write drafts that a human publishes.
+3. `cd cli && npm install && npm run build && npm link`
+4. `printf '%s' "$TOKEN" | pawpress auth login --url https://your-site.example`
+
+```sh
+pawpress posts pull my-post -o my-post.md
+pawpress posts push my-post.md --write-back
+```
+
+Local images referenced from a post are uploaded automatically; they must be non-symlink regular
+files under the post's own directory and at most 4 MB. Pass `--allow-outside-dir` to
+`push`/`create`/`update` to allow a path outside it.
+
+See [`docs/cli.md`](docs/cli.md) for the setup guide, agent instructions, and exit codes.
+
 ## Deployment
 
 ### Vercel (Recommended)
@@ -338,6 +356,7 @@ Ensure all environment variables are set in your hosting platform:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SECRET_KEY`
+- `PAWPRESS_TOKEN_SECRET` (needed for the CLI/API; set it separately for Preview and Production)
 
 ## License
 
