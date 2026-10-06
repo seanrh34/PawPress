@@ -184,9 +184,11 @@ Scope `categories:write`. Body: `name` (1–100), `slug`, `description` (1–100
 `201`: Category. Slug taken → `409`.
 
 ### `PATCH /api/v1/categories/:id`
+`:id` must be a UUID (a non-UUID returns `404 not_found` without querying the database).
 Scope `categories:write`. Partial update of `name`, `slug`, `description`. `200`: Category.
 
 ### `DELETE /api/v1/categories/:id`
+`:id` must be a UUID (a non-UUID returns `404 not_found` without querying the database).
 Scope `categories:write`. `409 conflict` if any post uses the category.
 `200`: `{ "deleted": true, "id": "uuid" }`.
 

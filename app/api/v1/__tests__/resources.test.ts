@@ -774,6 +774,32 @@ describe('categories', () => {
     expect((await response.json()).error.code).toBe('conflict');
     expect(db.callsFor('categories', 'delete')).toHaveLength(0);
   });
+
+  it('returns 404 for a non-UUID id on PATCH without touching data', async () => {
+    const token = await issueToken(['categories:write']);
+    const response = await categoryPatch(
+      authedJson(`${BASE}/categories/not-a-uuid`, 'PATCH', token, {
+        name: 'Renamed',
+      }),
+      ctxFor('not-a-uuid'),
+    );
+    expect(response.status).toBe(404);
+    expect((await response.json()).error.code).toBe('not_found');
+    expect(db.callsFor('categories', 'select')).toHaveLength(0);
+    expect(db.callsFor('categories', 'update')).toHaveLength(0);
+  });
+
+  it('returns 404 for a non-UUID id on DELETE without touching data', async () => {
+    const token = await issueToken(['categories:write']);
+    const response = await categoryDelete(
+      authed(`${BASE}/categories/not-a-uuid`, 'DELETE', token),
+      ctxFor('not-a-uuid'),
+    );
+    expect(response.status).toBe(404);
+    expect((await response.json()).error.code).toBe('not_found');
+    expect(db.callsFor('categories', 'select')).toHaveLength(0);
+    expect(db.callsFor('categories', 'delete')).toHaveLength(0);
+  });
 });
 
 describe('media uploads', () => {
