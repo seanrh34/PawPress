@@ -32,6 +32,15 @@ function isLockedError(error: unknown): error is CliError {
   return error instanceof CliError && error.code === 'locked';
 }
 
+/**
+ * A 403 from the lock endpoint means the token lacks a scope needed to edit the
+ * post (e.g. `posts:publish` on a published post). That is not a fatal error
+ * for `posts pull`: it falls back to editing without a lock.
+ */
+function isForbiddenError(error: unknown): boolean {
+  return error instanceof CliError && error.status === 403;
+}
+
 
 /**
  * Re-throws a 409 `locked` as `<verb> refused: <message>`, preserving the
@@ -293,11 +302,22 @@ async function postsPull(ctx: Context, args: string[]): Promise<void> {
       min: MIN_LOCK_TTL_SECONDS,
       max: MAX_LOCK_TTL_SECONDS,
     });
-    lock = await acquireAgentLock(client, post.id, {
-      ttlSeconds: ttl ?? DEFAULT_LOCK_TTL_SECONDS,
-      verb: 'pull',
-    });
-    if (!lock) {
+    let forbidden = false;
+    try {
+      lock = await acquireAgentLock(client, post.id, {
+        ttlSeconds: ttl ?? DEFAULT_LOCK_TTL_SECONDS,
+        verb: 'pull',
+      });
+    } catch (error) {
+      if (isForbiddenError(error)) {
+        // A read-only token can still pull (for review); it just can't lock.
+        out.note("not locking: this token can't edit this post");
+        forbidden = true;
+      } else {
+        throw error;
+      }
+    }
+    if (!lock && !forbidden) {
       out.note(
         'edit locking unavailable on this site; relying on updated_at conflict detection',
       );
@@ -577,6 +597,7 @@ async function postsUpdate(ctx: Context, args: string[]): Promise<void> {
       file: { type: 'string' },
       stdin: { type: 'boolean' },
       'if-updated-at': { type: 'string' },
+      session: { type: 'string' },
       'dry-run': { type: 'boolean' },
       'allow-outside-dir': { type: 'boolean' },
     },
@@ -591,6 +612,8 @@ async function postsUpdate(ctx: Context, args: string[]): Promise<void> {
   const ifUpdatedAt = optString(values, 'if-updated-at');
   const file = optString(values, 'file');
   const useStdin = optBool(values, 'stdin');
+  const sessionOption = optString(values, 'session');
+  if (sessionOption !== undefined) assertUuid(sessionOption, 'lock session');
   const dryRun = optBool(values, 'dry-run');
   const allowOutsideDir = optBool(values, 'allow-outside-dir');
   if (file && useStdin) throw usageError('posts update accepts at most one of --file or --stdin');
@@ -615,8 +638,23 @@ async function postsUpdate(ctx: Context, args: string[]): Promise<void> {
   if (featuredImage !== undefined) body.featured_image_url = featuredImage;
 
   let prepared: Prepared | undefined;
+  // A `--file` produced by `posts pull` may carry a lock_session; honour it so
+  // an agent isn't blocked by its own lock (unless --session overrides it).
+  let lockSession = sessionOption;
   if (hasContent) {
-    const content = file ? await readContentFile(file) : await deps.stdin();
+    const raw = file ? await readContentFile(file) : await deps.stdin();
+    let content = raw;
+    if (file) {
+      const doc = parseFrontMatter(raw);
+      if (lockSession === undefined) {
+        const fromFile = doc.data.lock_session;
+        if (typeof fromFile === 'string' && fromFile !== '') {
+          assertUuid(fromFile, 'lock_session in front matter');
+          lockSession = fromFile;
+        }
+      }
+      content = doc.body;
+    }
     const baseDir = baseDirForFile(file, deps.cwd);
     prepared = await prepareContent(
       dryRun ? null : await makeClient(ctx),
@@ -639,7 +677,7 @@ async function postsUpdate(ctx: Context, args: string[]): Promise<void> {
   const client = await makeClient(ctx);
   let post: Post;
   try {
-    post = await sendPost(client, 'PATCH', path, body, true, id);
+    post = await sendPost(client, 'PATCH', path, body, true, id, lockSession);
   } catch (error) {
     reframeLocked(error, 'post update');
   }
@@ -738,11 +776,16 @@ async function postsSetStatus(
   action: 'publish' | 'unpublish',
 ): Promise<void> {
   const { out } = ctx;
-  const options: OptionSpec = action === 'publish' ? { at: { type: 'string' } } : {};
+  const options: OptionSpec =
+    action === 'publish'
+      ? { at: { type: 'string' }, session: { type: 'string' } }
+      : { session: { type: 'string' } };
   const { values, positionals } = parseOptions(args, options, true);
   const id = assertUuid(singleRef(positionals, `posts ${action}`), 'post id');
   const at = action === 'publish' ? optString(values, 'at') : undefined;
   if (at !== undefined) assertFutureIso(at, '--at');
+  const session = optString(values, 'session');
+  if (session !== undefined) assertUuid(session, 'lock session');
 
   const client = await makeClient(ctx);
   let post: Post;
@@ -751,6 +794,9 @@ async function postsSetStatus(
       method: 'POST',
       path: `/api/v1/posts/${encodeURIComponent(id)}/${action}`,
       ...(at === undefined ? {} : { json: { at } }),
+      ...(session === undefined
+        ? {}
+        : { headers: { [LOCK_SESSION_HEADER]: session } }),
     });
   } catch (error) {
     reframeLocked(error, `post ${action}`);
@@ -763,11 +809,13 @@ async function postsDelete(ctx: Context, args: string[]): Promise<void> {
   const { out } = ctx;
   const { values, positionals } = parseOptions(
     args,
-    { yes: { type: 'boolean' }, 'dry-run': { type: 'boolean' } },
+    { yes: { type: 'boolean' }, 'dry-run': { type: 'boolean' }, session: { type: 'string' } },
     true,
   );
   const id = assertUuid(singleRef(positionals, 'posts delete'), 'post id');
   const dryRun = optBool(values, 'dry-run');
+  const session = optString(values, 'session');
+  if (session !== undefined) assertUuid(session, 'lock session');
   if (!optBool(values, 'yes')) {
     throw usageError('posts delete requires --yes');
   }
@@ -779,7 +827,13 @@ async function postsDelete(ctx: Context, args: string[]): Promise<void> {
   const client = await makeClient(ctx);
   let result: DeletedResponse;
   try {
-    result = await client.request<DeletedResponse>({ method: 'DELETE', path });
+    result = await client.request<DeletedResponse>({
+      method: 'DELETE',
+      path,
+      ...(session === undefined
+        ? {}
+        : { headers: { [LOCK_SESSION_HEADER]: session } }),
+    });
   } catch (error) {
     reframeLocked(error, 'post delete');
   }
