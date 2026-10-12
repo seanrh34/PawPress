@@ -1,21 +1,7 @@
 import { supabase } from './supabase';
 import { Post } from './types';
 
-/**
- * True when a post is visible to anonymous visitors: it has a `published_at`
- * that is not in the future. Drafts (null) and scheduled (future) posts are
- * hidden until they go live.
- */
-export function isPubliclyVisible(
-  post: Pick<Post, 'published_at'>,
-  now: Date = new Date(),
-): boolean {
-  if (!post.published_at) {
-    return false;
-  }
-  const ts = Date.parse(post.published_at);
-  return !Number.isNaN(ts) && ts <= now.getTime();
-}
+export { isPubliclyVisible } from './cms/status';
 
 // Fetch all published posts (scheduled posts are hidden until they go live)
 export async function getAllPosts(): Promise<Post[]> {

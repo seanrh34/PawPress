@@ -23,3 +23,15 @@ export function postStatus(
   }
   return 'scheduled';
 }
+
+/**
+ * True when a post is visible to anonymous visitors: it has a `published_at`
+ * that is not in the future. Drafts (null) and scheduled (future) posts are
+ * hidden until they go live.
+ */
+export function isPubliclyVisible(
+  post: { published_at: string | null },
+  now: Date = new Date(),
+): boolean {
+  return postStatus(post.published_at, now) === 'published';
+}

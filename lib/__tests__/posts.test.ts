@@ -72,8 +72,8 @@ describe('isPubliclyVisible', () => {
     expect(isPubliclyVisible({ published_at: now.toISOString() }, now)).toBe(true);
   });
 
-  it('hides an unparseable timestamp', () => {
-    expect(isPubliclyVisible({ published_at: 'nonsense' }, now)).toBe(false);
+  it('treats an unparseable timestamp as visible, matching postStatus', () => {
+    expect(isPubliclyVisible({ published_at: 'nonsense' }, now)).toBe(true);
   });
 });
 

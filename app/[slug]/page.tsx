@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { Metadata } from 'next';
-import { Post, Category } from '@/lib/types';
-import { isPubliclyVisible } from '@/lib/posts';
+import { Post } from '@/lib/types';
+import { isPubliclyVisible } from '@/lib/cms/status';
 
 // Reserved slugs that should not match post routes
 const RESERVED_SLUGS = ['admin', 'api', 'category', 'posts', 'styles'];
