@@ -42,6 +42,10 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
   const [content, setContent] = useState<SerializedEditorState | null>(post?.content_lexical || null);
   const [publishMode, setPublishMode] = useState<PublishMode>(() => initialPublishMode(post));
   const [scheduleAt, setScheduleAt] = useState(() => (isFutureIso(post?.published_at) ? toLocalDateTimeInput(post!.published_at!) : ''));
+  // The schedule the post was loaded with. If the field still matches it, we
+  // send the original published_at untouched (no lost seconds) even when other
+  // fields change — and we don't re-validate a time that is now in the past.
+  const [initialScheduleAt] = useState(() => (isFutureIso(post?.published_at) ? toLocalDateTimeInput(post!.published_at!) : ''));
   const [timeZone, setTimeZone] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(post?.featured_image_url || null);
@@ -233,7 +237,14 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
       return;
     }
 
-    if (publishMode === 'schedule') {
+    // Only validate the schedule when the user actually changed it; an
+    // untouched schedule is sent back verbatim (its time may already have
+    // passed, in which case the post is simply published now/at that time).
+    const scheduleUnchanged =
+      publishMode === 'schedule' &&
+      post?.published_at != null &&
+      scheduleAt === initialScheduleAt;
+    if (publishMode === 'schedule' && !scheduleUnchanged) {
       if (!scheduleAt) {
         alert('Please choose a date and time to schedule the post');
         return;
@@ -264,7 +275,9 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
         publishMode === 'draft'
           ? null
           : publishMode === 'schedule'
-            ? new Date(scheduleAt).toISOString()
+            ? scheduleUnchanged && existingPublishedAt
+              ? existingPublishedAt
+              : new Date(scheduleAt).toISOString()
             : existingPublishedAt && new Date(existingPublishedAt).getTime() <= Date.now()
               ? existingPublishedAt
               : new Date().toISOString();
@@ -383,6 +396,21 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
           <div className="mb-6 rounded-lg border border-gray-300 bg-gray-100 px-4 py-3 text-sm text-gray-700">
             Live edit locking isn&apos;t enabled on this site (apply the
             post_edit_locks migration). Conflicting saves are still detected.
+          </div>
+        )}
+
+        {editMode && lock.state.status === 'error' && (
+          <div className="mb-6 rounded-lg border border-gray-300 bg-gray-100 px-4 py-3 text-sm text-gray-700">
+            <p>Couldn&apos;t check whether someone else is editing (retrying…).</p>
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => void handleSubmit()}
+                className="btn-secondary"
+              >
+                Save anyway
+              </button>
+            </div>
           </div>
         )}
 
