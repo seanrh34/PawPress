@@ -244,7 +244,7 @@ describe('posts push edit locks', () => {
 
     expect(await h.run(['posts', 'push', file])).toBe(5);
     expect(h.stderrText()).toContain('failed to apply edits:');
-    expect(h.stderrText()).toContain('an admin took over editing');
+    expect(h.stderrText()).toContain('taken over by admin alice@example.com at 10:02 UTC');
     expect(h.stderrText()).toContain(`your changes are still in ${file}`);
     expect(await readFile(file, 'utf8')).toBe(original);
   });

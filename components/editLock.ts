@@ -159,7 +159,16 @@ export function useEditLock(
 ): UseEditLock {
   const [state, dispatch] = useReducer(editLockReducer, initialEditorLockState);
   const sessionRef = useRef<string | null>(null);
+  // One session id per editor instance, sent with every acquire. Renewing your
+  // own session is idempotent on the server, so overlapping requests (React
+  // StrictMode's double mount, a poll racing a takeover) can't block this tab
+  // with a lock it created itself.
+  const ownSessionRef = useRef<string | null>(null);
   const path = postId ? `/api/posts/${postId}/lock` : null;
+  const ownSessionId = () => {
+    if (!ownSessionRef.current) ownSessionRef.current = crypto.randomUUID();
+    return ownSessionRef.current;
+  };
 
   useEffect(() => {
     sessionRef.current = state.status === 'held' ? state.sessionId : null;
@@ -185,7 +194,10 @@ export function useEditLock(
 
   const acquire = useCallback(
     async (force: boolean) => {
-      const data = await post(force ? { force: true } : {});
+      const sessionId = ownSessionId();
+      const data = await post(
+        force ? { session_id: sessionId, force: true } : { session_id: sessionId },
+      );
       if (!data) return;
       const action = actionForLockResponse(data, {
         wasHolding: force === false && sessionRef.current !== null,

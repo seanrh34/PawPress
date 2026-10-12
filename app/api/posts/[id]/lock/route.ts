@@ -6,7 +6,11 @@ import {
   toPublicLock,
 } from '@/lib/cms/lockService';
 import { getPostById } from '@/lib/cms/postService';
-import { requireWebLockSession, webErrorResponse } from '@/lib/api/webLock';
+import {
+  WebResponseError,
+  requireWebLockSession,
+  webErrorResponse,
+} from '@/lib/api/webLock';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,7 +25,14 @@ async function readBody(request: Request): Promise<LockBody> {
   if (raw.trim() === '') {
     return {};
   }
-  const parsed = JSON.parse(raw);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new WebResponseError(
+      NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }),
+    );
+  }
   if (typeof parsed !== 'object' || parsed === null) {
     return {};
   }

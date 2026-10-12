@@ -32,13 +32,6 @@ function isLockedError(error: unknown): error is CliError {
   return error instanceof CliError && error.code === 'locked';
 }
 
-function takenOver(details: unknown): boolean {
-  return (
-    typeof details === 'object' &&
-    details !== null &&
-    (details as { taken_over?: unknown }).taken_over === true
-  );
-}
 
 /**
  * Re-throws a 409 `locked` as `<verb> refused: <message>`, preserving the
@@ -451,9 +444,9 @@ async function postsPush(ctx: Context, args: string[]): Promise<void> {
     );
   } catch (error) {
     if (isLockedError(error)) {
-      const reason = takenOver(error.details)
-        ? 'an admin took over editing'
-        : error.message;
+      // The server message names the holder and, for a takeover, says so
+      // ("Your edit session was taken over by admin alice@… at 10:05 UTC").
+      const reason = error.message;
       throw new CliError(
         `failed to apply edits: ${reason}; your changes are still in ${file}`,
         EXIT.CONFLICT,
