@@ -20,6 +20,7 @@ import {
   getPostQuerySchema,
   resolveCategoryOrThrow,
   resolveLexicalContent,
+  resolveUpdatePublishedAt,
   toPostResource,
   updatePostBodySchema,
 } from '@/lib/cms/v1';
@@ -64,6 +65,7 @@ export const PATCH = withApi<{ id: string }>(
 
     for (const scope of requiredScopesForPostUpdate(current, {
       status: body.status,
+      hasPublishAt: body.publish_at !== undefined,
     })) {
       assertScope(ctx.auth, scope);
     }
@@ -91,10 +93,9 @@ export const PATCH = withApi<{ id: string }>(
       patch.content_lexical = resolveLexicalContent(body);
     }
 
-    if (body.status === 'published') {
-      patch.published_at = current.published_at ?? new Date().toISOString();
-    } else if (body.status === 'draft') {
-      patch.published_at = null;
+    const publishedAt = resolveUpdatePublishedAt(body, current);
+    if (publishedAt !== undefined) {
+      patch.published_at = publishedAt;
     }
 
     // Always write against the version the scope decision above was made on,

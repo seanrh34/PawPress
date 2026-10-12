@@ -13,13 +13,20 @@ export async function GET() {
     const user = await getUser();
 
     // Authenticated users (admins) can see all posts including drafts; the
-    // anonymous client only sees published posts (enforced by RLS).
+    // anonymous client only sees posts that are already live (never scheduled
+    // posts, whose content RLS still exposes).
     const db = user ? await getAuthenticatedSupabaseClient() : supabase;
 
-    const { data, error } = await db
+    let query = db
       .from('posts')
       .select('*')
       .order('created_at', { ascending: false });
+
+    if (!user) {
+      query = query.lte('published_at', new Date().toISOString());
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw ApiError.internal(error.message);
@@ -46,6 +53,17 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     let { content_lexical } = body;
+
+    // A future published_at schedules the post; anything present must at least
+    // be a parseable date (the editor sends an ISO string or null).
+    if (body.published_at !== undefined && body.published_at !== null) {
+      if (
+        typeof body.published_at !== 'string' ||
+        Number.isNaN(Date.parse(body.published_at))
+      ) {
+        throw ApiError.validation('published_at must be a valid date');
+      }
+    }
 
     // Process base64 images: upload to Supabase and replace with permanent URLs
     if (content_lexical) {

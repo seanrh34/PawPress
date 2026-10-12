@@ -26,7 +26,7 @@ Replace the `auth.role() = 'authenticated'` write policies with ones that requir
 e.g. a `SECURITY DEFINER` helper `is_admin()` that checks
 `exists (select 1 from user_profiles where id = auth.uid() and role in ('master','admin'))`, and
 use it in the `posts`, `categories`, and `storage.objects` write policies. Keep the public read
-policies (`published_at IS NOT NULL` for posts).
+policies (see (i) for the scheduled-posts fix).
 
 Note: token-authenticated `/api/v1` requests use the service-role client and bypass RLS by design;
 the app enforces scopes and the owner's role on every request (`lib/auth/context.ts`,
@@ -108,3 +108,28 @@ the host's edge config), e.g. `default-src 'self'`, `img-src 'self' https: data:
 `unsafe-inline` for scripts. Note Next.js’s own runtime may need nonces/`'unsafe-inline'` for styles
 and inline bootstrap scripts, so start in report-only mode and tune before enforcing. This has **not**
 been added yet.
+
+## (i) Hide scheduled posts from the public read policy — security
+
+The anon RLS read policy on `posts` is `published_at IS NOT NULL`. That treats a **scheduled** post
+(`published_at` in the future) as public, so its full row — including `content_html` and
+`content_lexical` — is readable by anyone who queries Supabase's REST API directly with the public
+anon key. The app hides future posts in every public query and 404s their pages, but the database
+policy does not.
+
+Change the policy to also require the timestamp to be in the past:
+
+```sql
+-- Drop the old public read policy (name may differ; check Storage > Policies).
+drop policy if exists "Public posts are viewable by everyone" on public.posts;
+
+create policy "Public can read published posts"
+  on public.posts
+  for select
+  to anon, authenticated
+  using (published_at is not null and published_at <= now());
+```
+
+`now()` is evaluated per query, so a scheduled post becomes readable the moment it goes live without
+any cron job. The service-role client used by `/api/v1` bypasses RLS and is unaffected. Do not run
+this automatically — apply it in the Supabase SQL editor.

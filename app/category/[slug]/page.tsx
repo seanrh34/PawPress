@@ -27,7 +27,8 @@ async function getCategory(slug: string): Promise<Category | null> {
 
 async function getCategoryPosts(categoryId: string): Promise<Post[]> {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/posts?category_id=eq.${categoryId}&published_at=not.is.null&order=published_at.desc`, {
+    const nowIso = new Date().toISOString();
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/posts?category_id=eq.${categoryId}&published_at=not.is.null&published_at=lte.${encodeURIComponent(nowIso)}&order=published_at.desc`, {
       headers: {
         'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,

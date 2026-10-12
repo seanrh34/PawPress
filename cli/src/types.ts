@@ -9,7 +9,7 @@ export interface Post {
   title: string;
   slug: string;
   excerpt: string;
-  status: 'draft' | 'published';
+  status: 'draft' | 'scheduled' | 'published';
   published_at: string | null;
   category: PostCategory | null;
   featured_image_url: string | null;

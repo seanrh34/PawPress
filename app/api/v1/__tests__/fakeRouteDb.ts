@@ -45,6 +45,10 @@ interface FakeQuery extends PromiseLike<FakeResult> {
   is(...args: unknown[]): FakeQuery;
   not(...args: unknown[]): FakeQuery;
   ilike(...args: unknown[]): FakeQuery;
+  gt(...args: unknown[]): FakeQuery;
+  gte(...args: unknown[]): FakeQuery;
+  lt(...args: unknown[]): FakeQuery;
+  lte(...args: unknown[]): FakeQuery;
   order(...args: unknown[]): FakeQuery;
   range(...args: unknown[]): FakeQuery;
   limit(...args: unknown[]): FakeQuery;
@@ -118,6 +122,22 @@ export function makeRouteDb(): RouteDb {
         calls.push({ table, method: 'ilike', args });
         return chain;
       },
+      gt(...args) {
+        calls.push({ table, method: 'gt', args });
+        return chain;
+      },
+      gte(...args) {
+        calls.push({ table, method: 'gte', args });
+        return chain;
+      },
+      lt(...args) {
+        calls.push({ table, method: 'lt', args });
+        return chain;
+      },
+      lte(...args) {
+        calls.push({ table, method: 'lte', args });
+        return chain;
+      },
       order(...args) {
         calls.push({ table, method: 'order', args });
         return chain;
@@ -182,6 +202,22 @@ export function makeRouteDb(): RouteDb {
       },
       ilike(...args) {
         calls.push({ table: 'user_profiles', method: 'ilike', args });
+        return chain;
+      },
+      gt(...args) {
+        calls.push({ table: 'user_profiles', method: 'gt', args });
+        return chain;
+      },
+      gte(...args) {
+        calls.push({ table: 'user_profiles', method: 'gte', args });
+        return chain;
+      },
+      lt(...args) {
+        calls.push({ table: 'user_profiles', method: 'lt', args });
+        return chain;
+      },
+      lte(...args) {
+        calls.push({ table: 'user_profiles', method: 'lte', args });
         return chain;
       },
       order(...args) {

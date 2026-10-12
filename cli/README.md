@@ -49,13 +49,13 @@ Tokens and header values are never printed; they are redacted from all output.
 pawpress auth login --url <site>          # token read from stdin
 pawpress auth status | auth logout
 
-pawpress posts list [--status ...] [--category <slug>] [--search <q>] [--limit N] [--offset N]
+pawpress posts list [--status draft|scheduled|published|all] [--category <slug>] [--search <q>] [--limit N] [--offset N]
 pawpress posts get <id|slug> [--format markdown|lexical|html] [-o file]
 pawpress posts pull <id|slug> [-o file.md]
-pawpress posts push <file.md> [--publish] [--dry-run] [--force] [--write-back]
-pawpress posts create --title T --category C [--slug S] [--excerpt E] (--file f.md | --stdin) [--publish] [--dry-run]
+pawpress posts push <file.md> [--publish] [--at <ISO>] [--dry-run] [--force] [--write-back]
+pawpress posts create --title T --category C [--slug S] [--excerpt E] (--file f.md | --stdin) [--publish] [--at <ISO>] [--dry-run]
 pawpress posts update <id> [--title T] [--slug S] [--excerpt E] [--category C] [--featured-image URL] [--file f.md | --stdin] [--if-updated-at ts] [--dry-run]
-pawpress posts publish <id> | posts unpublish <id>
+pawpress posts publish <id> [--at <ISO>] | posts unpublish <id>
 pawpress posts delete <id> --yes [--dry-run]
 
 pawpress categories list
@@ -70,12 +70,19 @@ Global flags: `--json`, `--url <site>`, `--token <token>`, `-h/--help`, `--versi
 `--json` (or `PAWPRESS_OUTPUT=json`) prints exactly one JSON document to stdout.
 
 Push reads YAML front matter (`id`, `title`, `slug`, `category`, `excerpt`,
-`featured_image`, `status`, `updated_at`) followed by Markdown. Only **relative**
-image paths (`img/x.png`, `./x.png`, `../x.png`) are uploaded automatically and
-their references rewritten; site-relative (`/...`), protocol-relative, `data:`
-and remote URLs are left untouched. The same rule applies to a local
-`featured_image`. Updating sends `if_updated_at` from the front matter unless
-`--force` is given.
+`featured_image`, `status`, `publish_at`, `updated_at`) followed by Markdown. Only
+**relative** image paths (`img/x.png`, `./x.png`, `../x.png`) are uploaded
+automatically and their references rewritten; site-relative (`/...`),
+protocol-relative, `data:` and remote URLs are left untouched. The same rule
+applies to a local `featured_image`. Updating sends `if_updated_at` from the
+front matter unless `--force` is given.
+
+`status` is `draft | scheduled | published`. For `status: scheduled` the front
+matter must also carry `publish_at` (an ISO-8601 time with an explicit offset or
+`Z`, in the future). `--at <ISO>` on `push`/`create` schedules without editing
+the front matter, and `posts publish <id> --at <ISO>` reschedules; both require
+the `posts:publish` scope. `--publish` still means "publish now" and cannot be
+combined with `--at`.
 
 Ids that the API treats as UUIDs (post `id` in front matter and the positional
 ids of `posts update|publish|unpublish|delete` and `categories update|delete`)

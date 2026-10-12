@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { Metadata } from 'next';
-import { Post, Category } from '@/lib/types';
+import { Post } from '@/lib/types';
+import { isPubliclyVisible } from '@/lib/cms/status';
 
 // Reserved slugs that should not match post routes
 const RESERVED_SLUGS = ['admin', 'api', 'category', 'posts', 'styles'];
@@ -24,6 +25,12 @@ async function getPost(slug: string): Promise<Post | null> {
     if (!data[0]) return null;
 
     const post = data[0];
+
+    // Drafts and scheduled posts must not be publicly readable: hide them as
+    // if they didn't exist (404), including from generateMetadata.
+    if (!isPubliclyVisible(post)) {
+      return null;
+    }
 
     // Fetch category data if post has category_id
     if (post.category_id) {
