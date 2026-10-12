@@ -137,10 +137,17 @@ export async function PUT(
         await assertNoForeignLock(admin, id, lockSessionId, user.id);
       } catch (lockError) {
         if (lockError instanceof ApiError && lockError.code === 'locked') {
-          const holder = (lockError.details as { holder?: unknown } | undefined)
-            ?.holder;
+          const details = lockError.details as
+            | { holder?: unknown; acquired_at?: string; expires_at?: string }
+            | undefined;
           return NextResponse.json(
-            { error: lockError.message, code: 'locked', holder },
+            {
+              error: lockError.message,
+              code: 'locked',
+              holder: details?.holder,
+              acquired_at: details?.acquired_at,
+              expires_at: details?.expires_at,
+            },
             { status: 409 },
           );
         }

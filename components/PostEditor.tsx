@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Editor from '@/components/Editor';
 import FeaturedImageUpload from '@/components/FeaturedImageUpload';
+import { useEditLock, lockAllowsSave } from '@/components/editLock';
 import { SerializedEditorState } from 'lexical';
 import { Post, Category } from '@/lib/types';
 import { postStatus } from '@/lib/cms/status';
@@ -49,6 +50,12 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryId, setCategoryId] = useState(post?.category_id || '');
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [loadedUpdatedAt, setLoadedUpdatedAt] = useState(post?.updated_at ?? null);
+  const [conflict, setConflict] = useState<string | null>(null);
+
+  const editMode = mode === 'edit' && !!post?.id;
+  const lock = useEditLock(post?.id, editMode);
+  const canSave = !editMode || lockAllowsSave(lock.state);
 
   // Fetch categories on mount
   useEffect(() => {
@@ -188,10 +195,15 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (overwrite = false) => {
     // Validate required fields
     if (!title || !slug) {
       alert('Title and slug are required');
+      return;
+    }
+
+    if (editMode && !lockAllowsSave(lock.state)) {
+      alert('You are not currently editing this post.');
       return;
     }
 
@@ -233,6 +245,7 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
     }
 
     setIsSaving(true);
+    setConflict(null);
 
     try {
       // Delete old image if it exists and is different
@@ -256,28 +269,68 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
               ? existingPublishedAt
               : new Date().toISOString();
 
+      const payload: Record<string, unknown> = {
+        title,
+        slug,
+        excerpt,
+        content_lexical: content,
+        featured_image_url: newFeaturedImageUrl,
+        published_at: publishedAt,
+        category_id: categoryId,
+      };
+
+      // Edit mode carries the lock session and the revision this editor loaded,
+      // so the server can detect takeovers and conflicting saves atomically.
+      if (editMode) {
+        if (lock.state.sessionId) {
+          payload.lock_session_id = lock.state.sessionId;
+        }
+        if (!overwrite && loadedUpdatedAt) {
+          payload.if_updated_at = loadedUpdatedAt;
+        }
+      }
+
       const response = await fetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          title,
-          slug,
-          excerpt,
-          content_lexical: content,
-          featured_image_url: newFeaturedImageUrl,
-          published_at: publishedAt,
-          category_id: categoryId,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to ${mode} post`);
+        const errorData = await response.json().catch(() => ({} as Record<string, unknown>));
+
+        if (response.status === 409 && errorData.code === 'locked') {
+          const holder = errorData.holder as
+            | { kind: 'user' | 'agent'; label: string; user_id: string }
+            | undefined;
+          if (holder) {
+            lock.markLost({
+              holder,
+              acquired_at: (errorData.acquired_at as string) ?? new Date().toISOString(),
+              expires_at: (errorData.expires_at as string) ?? new Date().toISOString(),
+            });
+          }
+          return;
+        }
+
+        if (response.status === 409 && errorData.code === 'conflict') {
+          setConflict((errorData.current_updated_at as string) ?? '');
+          return;
+        }
+
+        throw new Error(
+          (errorData.error as string) || `Failed to ${mode} post`,
+        );
       }
 
       const data = await response.json();
+      if (editMode) {
+        setLoadedUpdatedAt(data.updated_at ?? loadedUpdatedAt);
+        // Release our lock before leaving the page.
+        lock.release();
+      }
       router.push('/admin');
       router.refresh();
     } catch (error) {
@@ -302,6 +355,22 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
           ? 'Update'
           : 'Schedule';
 
+  const formatLockTime = (iso: string | null): string => {
+    if (!iso) return '';
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime())
+      ? iso
+      : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const copyContent = useCallback(() => {
+    try {
+      void navigator.clipboard?.writeText(JSON.stringify(content ?? null, null, 2));
+    } catch {
+      // Clipboard access is best-effort.
+    }
+  }, [content]);
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Main Content */}
@@ -309,6 +378,96 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
         <h1 className="text-3xl font-bold text-gray-900 mb-8">
           {mode === 'create' ? 'Create New Post' : 'Edit Post'}
         </h1>
+
+        {editMode && lock.state.status === 'unavailable' && (
+          <div className="mb-6 rounded-lg border border-gray-300 bg-gray-100 px-4 py-3 text-sm text-gray-700">
+            Live edit locking isn&apos;t enabled on this site (apply the
+            post_edit_locks migration). Conflicting saves are still detected.
+          </div>
+        )}
+
+        {editMode && lock.state.status === 'blocked' && lock.state.holder && (
+          <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900">
+            <p className="text-sm">
+              {lock.state.holder.kind === 'agent' ? (
+                <>
+                  🤖 An AI agent is editing this post: {lock.state.holder.label},
+                  since {formatLockTime(lock.state.acquiredAt)}, lease expires{' '}
+                  {formatLockTime(lock.state.expiresAt)}. If you take over, the
+                  agent&apos;s pending changes will be rejected and it will report
+                  that an admin is editing.
+                </>
+              ) : (
+                <>
+                  👤 {lock.state.holder.label} is editing this post in another
+                  session since {formatLockTime(lock.state.acquiredAt)}.
+                </>
+              )}
+            </p>
+            <div className="mt-3 flex gap-3">
+              <button
+                type="button"
+                onClick={() => void lock.takeOver()}
+                className="btn-primary"
+              >
+                Take over editing
+              </button>
+              <Link href="/admin" className="btn-secondary">
+                Back to posts
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {editMode && lock.state.status === 'lost' && lock.state.holder && (
+          <div className="mb-6 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-red-900">
+            <p className="text-sm">
+              {lock.state.holder.label} took over editing at{' '}
+              {formatLockTime(lock.state.acquiredAt)}. Your unsaved changes have
+              NOT been saved.
+            </p>
+            <div className="mt-3 flex gap-3">
+              <button
+                type="button"
+                onClick={() => void lock.takeOver()}
+                className="btn-primary"
+              >
+                Take back editing
+              </button>
+              <button
+                type="button"
+                onClick={copyContent}
+                className="btn-secondary"
+              >
+                Copy my content
+              </button>
+            </div>
+          </div>
+        )}
+
+        {conflict !== null && (
+          <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900">
+            <p className="text-sm">
+              This post was changed since you opened it (possibly by an agent).
+            </p>
+            <div className="mt-3 flex gap-3">
+              <button
+                type="button"
+                onClick={() => void handleSubmit(true)}
+                className="btn-primary"
+              >
+                Overwrite their changes
+              </button>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="btn-secondary"
+              >
+                Reload latest
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-6">
           {/* Title */}
@@ -474,8 +633,8 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
           <div className="flex gap-4 pt-6 border-t border-gray-200">
             <button
               type="button"
-              onClick={handleSubmit}
-              disabled={isSaving}
+              onClick={() => void handleSubmit()}
+              disabled={isSaving || !canSave}
               className="btn-primary"
             >
               {submitLabel}
