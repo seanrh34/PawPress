@@ -6,6 +6,7 @@ export type ApiErrorCode =
   | 'forbidden'
   | 'not_found'
   | 'conflict'
+  | 'locked'
   | 'validation_failed'
   | 'payload_too_large'
   | 'unsupported_media_type'
@@ -16,6 +17,7 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   forbidden: 403,
   not_found: 404,
   conflict: 409,
+  locked: 409,
   validation_failed: 400,
   payload_too_large: 413,
   unsupported_media_type: 415,
@@ -57,6 +59,10 @@ export class ApiError extends Error {
 
   static conflict(message: string, details?: unknown): ApiError {
     return new ApiError('conflict', message, details);
+  }
+
+  static locked(message: string, details?: unknown): ApiError {
+    return new ApiError('locked', message, details);
   }
 
   static validation(message: string, details?: unknown): ApiError {

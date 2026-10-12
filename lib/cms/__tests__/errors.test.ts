@@ -12,6 +12,7 @@ describe('ApiError', () => {
     expect(ApiError.forbidden().status).toBe(403);
     expect(ApiError.notFound().status).toBe(404);
     expect(ApiError.conflict('x').status).toBe(409);
+    expect(ApiError.locked('x').status).toBe(409);
     expect(ApiError.validation('x').status).toBe(400);
     expect(ApiError.payloadTooLarge().status).toBe(413);
     expect(ApiError.unsupportedMediaType().status).toBe(415);
@@ -22,6 +23,14 @@ describe('ApiError', () => {
     const error = ApiError.conflict('taken', { current_updated_at: 'now' });
     expect(error.code).toBe('conflict');
     expect(error.details).toEqual({ current_updated_at: 'now' });
+  });
+
+  it('builds a locked error with holder details', () => {
+    const holder = { kind: 'user', label: 'a@b.c', user_id: 'u1' };
+    const error = ApiError.locked('taken over', { holder, taken_over: true });
+    expect(error.code).toBe('locked');
+    expect(error.status).toBe(409);
+    expect(error.details).toEqual({ holder, taken_over: true });
   });
 });
 
