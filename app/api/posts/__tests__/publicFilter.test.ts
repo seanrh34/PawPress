@@ -5,7 +5,10 @@ const state = vi.hoisted(() => ({
   user: null as unknown,
   anon: undefined as unknown,
   auth: undefined as unknown,
+  admin: undefined as unknown,
 }));
+
+const UUID = '22222222-2222-4222-8222-222222222222';
 
 const calls = vi.hoisted(() => ({
   all: [] as { table: string; method: string; args: unknown[] }[],
@@ -27,6 +30,10 @@ vi.mock('@/lib/supabase-server', () => ({
 
 vi.mock('@/lib/uploadImages', () => ({
   processAndUploadImages: async (value: unknown) => value,
+}));
+
+vi.mock('@/lib/supabase-admin', () => ({
+  createAdminClient: () => state.admin,
 }));
 
 vi.mock('@/lib/cms/postService', () => ({
@@ -68,6 +75,10 @@ function makeClient(result: FakeResult): unknown {
       calls.all.push({ table, method: 'single', args: [] });
       return result;
     };
+    query.maybeSingle = async () => {
+      calls.all.push({ table, method: 'maybeSingle', args: [] });
+      return result;
+    };
     query.then = (
       onFulfilled: (value: unknown) => unknown,
       onRejected?: (reason: unknown) => unknown,
@@ -86,8 +97,9 @@ function lteArgs(): unknown[][] {
 beforeEach(() => {
   calls.all = [];
   state.user = null;
-  state.anon = makeClient({ data: [{ id: 'p1' }], error: null });
-  state.auth = makeClient({ data: [{ id: 'p1' }], error: null });
+  state.anon = makeClient({ data: [{ id: UUID }], error: null });
+  state.auth = makeClient({ data: [{ id: UUID }], error: null });
+  state.admin = makeClient({ data: { role: 'admin' }, error: null });
 });
 
 afterEach(() => {
@@ -113,12 +125,12 @@ describe('GET /api/posts anonymous filtering', () => {
 });
 
 describe('GET /api/posts/:id anonymous filtering', () => {
-  const ctx = { params: Promise.resolve({ id: 'p1' }) };
+  const ctx = { params: Promise.resolve({ id: UUID }) };
 
   it('filters published_at <= now and 404s a hidden post', async () => {
     state.anon = makeClient({ data: null, error: { message: 'no rows' } });
     const response = await postGet(
-      new NextRequest('http://test.local/api/posts/p1'),
+      new NextRequest(`http://test.local/api/posts/${UUID}`),
       ctx,
     );
     expect(response.status).toBe(404);
@@ -129,13 +141,24 @@ describe('GET /api/posts/:id anonymous filtering', () => {
 
   it('does not filter for authenticated admins', async () => {
     state.user = { id: 'u1', email: 'a@b.c' };
-    state.auth = makeClient({ data: { id: 'p1' }, error: null });
+    state.auth = makeClient({ data: { id: UUID }, error: null });
     const response = await postGet(
-      new NextRequest('http://test.local/api/posts/p1'),
+      new NextRequest(`http://test.local/api/posts/${UUID}`),
       ctx,
     );
     expect(response.status).toBe(200);
     expect(lteArgs()).toHaveLength(0);
+  });
+
+  it('returns 404 for a non-UUID id without querying the database', async () => {
+    calls.all = [];
+    const response = await postGet(
+      new NextRequest('http://test.local/api/posts/not-a-uuid'),
+      { params: Promise.resolve({ id: 'not-a-uuid' }) },
+    );
+    expect(response.status).toBe(404);
+    expect(lteArgs()).toHaveLength(0);
+    expect(calls.all).toHaveLength(0);
   });
 });
 
@@ -157,16 +180,27 @@ describe('legacy web routes published_at validation', () => {
       }),
     );
     expect(response.status).toBe(400);
-    expect((await response.json()).error).toBe('published_at must be a valid date');
+    expect((await response.json()).error).toContain('published_at');
+  });
+
+  it('rejects an offset-less published_at on create', async () => {
+    state.user = { id: 'u1', email: 'a@b.c' };
+    const response = await postsPost(
+      jsonRequest('http://test.local/api/posts', 'POST', {
+        title: 'X',
+        published_at: '2026-07-01T09:00:00',
+      }),
+    );
+    expect(response.status).toBe(400);
   });
 
   it('rejects an unparseable published_at on update', async () => {
     state.user = { id: 'u1', email: 'a@b.c' };
     const response = await postPut(
-      jsonRequest('http://test.local/api/posts/p1', 'PUT', {
+      jsonRequest(`http://test.local/api/posts/${UUID}`, 'PUT', {
         published_at: 'not-a-date',
       }),
-      { params: Promise.resolve({ id: 'p1' }) },
+      { params: Promise.resolve({ id: UUID }) },
     );
     expect(response.status).toBe(400);
   });

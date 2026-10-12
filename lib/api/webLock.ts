@@ -30,6 +30,34 @@ function unauthorized(): WebResponseError {
   );
 }
 
+export interface WebSessionUser {
+  id: string;
+  email?: string | null;
+}
+
+/**
+ * Verifies that a signed-in user still has a `master`/`admin` `user_profiles`
+ * row, building the service-role client the privileged callers need. The 401
+ * uses the legacy `{ error: 'Unauthorized' }` shape.
+ */
+export async function requireAdminProfile(
+  user: WebSessionUser,
+): Promise<WebLockSession> {
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from('user_profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  const role = (data as { role?: unknown } | null)?.role;
+  if (error || (role !== 'master' && role !== 'admin')) {
+    throw unauthorized();
+  }
+
+  return { userId: user.id, email: user.email ?? '', db };
+}
+
 /**
  * Authenticates a cookie-session request for the lock endpoints: a verified
  * user (401 otherwise), the Origin header matching the host (403), and a
@@ -55,19 +83,7 @@ export async function requireWebLockSession(
     throw error;
   }
 
-  const db = createAdminClient();
-  const { data, error } = await db
-    .from('user_profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  const role = (data as { role?: unknown } | null)?.role;
-  if (error || (role !== 'master' && role !== 'admin')) {
-    throw unauthorized();
-  }
-
-  return { userId: user.id, email: user.email ?? '', db };
+  return requireAdminProfile(user);
 }
 
 /** Maps thrown errors from a web lock route to a Response. */

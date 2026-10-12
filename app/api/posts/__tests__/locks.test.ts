@@ -234,7 +234,7 @@ describe('web PUT /api/posts/:id with locks', () => {
   });
 
   it('returns 409 locked when another session holds an unexpired lock', async () => {
-    db.enqueue('post_edit_locks', { data: lockRow(), error: null });
+    db.enqueueRpc('get_post_edit_lock', { data: lockRow(), error: null });
     const response = await postPut(
       jsonRequest(`http://test.local/api/posts/${UUID}`, 'PUT', {
         title: 'New',
@@ -280,7 +280,7 @@ describe('web PUT /api/posts/:id with locks', () => {
 
 describe('web DELETE /api/posts/:id with an agent lock', () => {
   it('refuses while an agent holds the lock', async () => {
-    db.enqueue('post_edit_locks', {
+    db.enqueueRpc('get_post_edit_lock', {
       data: lockRow({ holder_kind: 'agent', holder_user_id: 'user-2', holder_label: 'agent "x" (bob@example.com)' }),
       error: null,
     });
@@ -299,7 +299,7 @@ describe('web DELETE /api/posts/:id with an agent lock', () => {
   });
 
   it('deletes with force=1', async () => {
-    db.enqueue('post_edit_locks', {
+    db.enqueueRpc('get_post_edit_lock', {
       data: lockRow({ holder_kind: 'agent', holder_user_id: 'user-2', holder_label: 'agent "x" (bob@example.com)' }),
       error: null,
     });
@@ -312,6 +312,55 @@ describe('web DELETE /api/posts/:id with an agent lock', () => {
       ctx,
     );
     expect(response.status).toBe(200);
+  });
+});
+
+describe('web write routes require an admin profile and a UUID', () => {
+  it('rejects a non-admin profile on PUT with the legacy 401 shape', async () => {
+    db.role = 'user';
+    const response = await postPut(
+      jsonRequest(`http://test.local/api/posts/${UUID}`, 'PUT', { title: 'New' }),
+      ctx,
+    );
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: 'Unauthorized' });
+    expect(db.callsFor('posts', 'update')).toHaveLength(0);
+  });
+
+  it('rejects a non-admin profile on DELETE with the legacy 401 shape', async () => {
+    db.hasProfile = false;
+    const response = await postDelete(
+      new NextRequest(`http://test.local/api/posts/${UUID}`, {
+        method: 'DELETE',
+        headers: { origin: 'http://test.local', host: 'test.local' },
+      }),
+      ctx,
+    );
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: 'Unauthorized' });
+    expect(db.callsFor('posts', 'delete')).toHaveLength(0);
+  });
+
+  it('returns 404 for a non-UUID id before any database call', async () => {
+    const nonUuid = 'not-a-uuid';
+    const put = await postPut(
+      jsonRequest('http://test.local/api/posts/not-a-uuid', 'PUT', { title: 'x' }),
+      { params: Promise.resolve({ id: nonUuid }) },
+    );
+    expect(put.status).toBe(404);
+
+    const del = await postDelete(
+      new NextRequest('http://test.local/api/posts/not-a-uuid', {
+        method: 'DELETE',
+        headers: { origin: 'http://test.local', host: 'test.local' },
+      }),
+      { params: Promise.resolve({ id: nonUuid }) },
+    );
+    expect(del.status).toBe(404);
+
+    expect(db.callsFor('posts', 'update')).toHaveLength(0);
+    expect(db.callsFor('posts', 'delete')).toHaveLength(0);
+    expect(db.rpcCalls).toHaveLength(0);
   });
 });
 
