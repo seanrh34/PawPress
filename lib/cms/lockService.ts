@@ -305,18 +305,25 @@ function lockMessage(lock: EditLock, takenOver: boolean): string {
  * Throws `409 locked` when an unexpired lock is held by a different session.
  * `sessionId` omitted means "any lock blocks me"; when provided, the caller's
  * own session does not block, and losing a held lock is reported as a takeover.
+ * `callerUserId`, when given, must also match the holder (like the SQL
+ * function's renew rule), so a session id is never enough on its own.
  */
 export async function assertNoForeignLock(
   db: SupabaseClient,
   postId: string,
   sessionId: string | undefined,
+  callerUserId?: string,
 ): Promise<void> {
   const lock = await getLock(db, postId);
   if (!lock) {
     return;
   }
 
-  if (sessionId !== undefined && lock.session_id === sessionId) {
+  if (
+    sessionId !== undefined &&
+    lock.session_id === sessionId &&
+    (callerUserId === undefined || lock.holder.user_id === callerUserId)
+  ) {
     return;
   }
 

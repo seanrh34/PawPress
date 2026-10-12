@@ -367,6 +367,20 @@ describe('assertNoForeignLock', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('passes when the session and caller user both match the holder', async () => {
+    const db = makeDb({ post_edit_locks: [{ data: row(), error: null }] });
+    await expect(
+      assertNoForeignLock(db.client, 'post-1', SESSION_ID, 'user-1'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('treats a matching session id from a different user as foreign', async () => {
+    const db = makeDb({ post_edit_locks: [{ data: row(), error: null }] });
+    await expect(
+      assertNoForeignLock(db.client, 'post-1', SESSION_ID, 'user-2'),
+    ).rejects.toMatchObject({ code: 'locked' });
+  });
+
   it('throws locked for a user holder when no session id is given', async () => {
     const db = makeDb({ post_edit_locks: [{ data: row(), error: null }] });
     try {
