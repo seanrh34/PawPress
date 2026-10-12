@@ -22,7 +22,6 @@ export interface FakeQuery extends PromiseLike<FakeResult> {
   not(...args: unknown[]): FakeQuery;
   gt(...args: unknown[]): FakeQuery;
   ilike(...args: unknown[]): FakeQuery;
-  gt(...args: unknown[]): FakeQuery;
   gte(...args: unknown[]): FakeQuery;
   lt(...args: unknown[]): FakeQuery;
   lte(...args: unknown[]): FakeQuery;
@@ -134,10 +133,6 @@ export function makeDb(queue: Record<string, FakeResult[]> = {}): FakeDb {
       },
       ilike(...args) {
         calls.push({ table, method: 'ilike', args });
-        return chain;
-      },
-      gt(...args) {
-        calls.push({ table, method: 'gt', args });
         return chain;
       },
       gte(...args) {
