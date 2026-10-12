@@ -78,18 +78,37 @@ interface LockRow {
 const HOLDER_LABEL_MAX = 200;
 
 /**
+ * Strips ASCII control characters (except tab and newline) from untrusted text
+ * before it is shown to a human, so a crafted token name or email can't emit
+ * terminal escape sequences.
+ */
+export function stripControlChars(value: string): string {
+  let out = '';
+  for (const char of value) {
+    const code = char.codePointAt(0) ?? 0;
+    if (code === 0x09 || code === 0x0a || (code >= 0x20 && code !== 0x7f)) {
+      out += char;
+    }
+  }
+  return out;
+}
+
+/**
  * Human-readable label for the lock holder. Users are labelled with their
- * email; agents with their token name plus the owner's email.
+ * email; agents with their token name plus the owner's email. Control
+ * characters are stripped from both inputs.
  */
 export function holderLabel(
   kind: LockHolderKind,
   email: string,
   tokenName?: string,
 ): string {
+  const cleanEmail = stripControlChars(email);
+  const cleanName = tokenName === undefined ? undefined : stripControlChars(tokenName);
   const label =
-    kind === 'agent' && tokenName
-      ? `agent "${tokenName}" (${email})`
-      : email;
+    kind === 'agent' && cleanName
+      ? `agent "${cleanName}" (${cleanEmail})`
+      : cleanEmail;
   return label.slice(0, HOLDER_LABEL_MAX);
 }
 
@@ -106,7 +125,8 @@ function toEditLock(row: LockRow): EditLock {
   };
 }
 
-const UNAVAILABLE_CODES = new Set(['42P01', '42883', 'PGRST202', 'PGRST205']);
+const MISSING_TABLE_CODES = new Set(['42P01', 'PGRST205']);
+const MISSING_FUNCTION_CODES = new Set(['42883', 'PGRST202']);
 
 function errorText(error: unknown): string {
   if (typeof error !== 'object' || error === null) {
@@ -119,8 +139,9 @@ function errorText(error: unknown): string {
 }
 
 /**
- * True when an error means the lock table or RPC is not installed yet (the
- * migration has not been applied), as opposed to a genuine failure.
+ * True only when an error means the lock table or RPC is not installed yet (the
+ * migration has not been applied). Everything else — including any other error
+ * code — is treated as a genuine failure so editing enforcement fails closed.
  */
 export function isLockingUnavailableError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) {
@@ -128,22 +149,24 @@ export function isLockingUnavailableError(error: unknown): boolean {
   }
 
   const code = (error as { code?: unknown }).code;
-  if (typeof code === 'string' && UNAVAILABLE_CODES.has(code)) {
-    return true;
+  if (typeof code !== 'string') {
+    return false;
   }
 
   const text = errorText(error);
-  if (text === '') {
-    return false;
+
+  if (MISSING_TABLE_CODES.has(code)) {
+    return text.includes('post_edit_locks');
   }
 
-  const mentionsTarget =
-    text.includes('post_edit_locks') || text.includes('acquire_post_edit_lock');
-  if (!mentionsTarget) {
-    return false;
+  if (MISSING_FUNCTION_CODES.has(code)) {
+    return (
+      text.includes('acquire_post_edit_lock') ||
+      text.includes('get_post_edit_lock')
+    );
   }
 
-  return text.includes('does not exist') || text.includes('Could not find');
+  return false;
 }
 
 let unavailableWarningLogged = false;
@@ -212,6 +235,8 @@ export async function acquireLock(
 
   const payload = (data ?? {}) as {
     acquired?: unknown;
+    reason?: unknown;
+    limit?: unknown;
     lock?: unknown;
   };
   const acquired = payload.acquired === true;
@@ -219,6 +244,16 @@ export async function acquireLock(
     payload.lock && typeof payload.lock === 'object'
       ? toEditLock(payload.lock as LockRow)
       : null;
+
+  // Agents are capped at a handful of concurrent locks; surface the cap as a
+  // conflict (not a foreign-lock 409) so the caller knows to release some.
+  if (!acquired && payload.reason === 'too_many_locks' && holder.kind === 'agent') {
+    const limit = typeof payload.limit === 'number' ? payload.limit : 5;
+    throw ApiError.conflict(
+      `Too many active edit locks for this user (max ${limit}); release some with \`pawpress posts unlock\``,
+      { reason: 'too_many_locks', limit },
+    );
+  }
 
   return { locking: 'enabled', acquired, lock };
 }
@@ -231,14 +266,12 @@ export async function acquireLock(
 export async function getLockState(
   db: SupabaseClient,
   postId: string,
-  now: string = new Date().toISOString(),
 ): Promise<{ locking: 'enabled' | 'unavailable'; lock: EditLock | null }> {
-  const { data, error } = await db
-    .from('post_edit_locks')
-    .select('*')
-    .eq('post_id', postId)
-    .gt('expires_at', now)
-    .maybeSingle();
+  // Read through the RPC so the database clock decides whether the lease has
+  // expired; app-server clock skew can't make a lock look alive or dead.
+  const { data, error } = await db.rpc('get_post_edit_lock', {
+    p_post_id: postId,
+  });
 
   if (error) {
     if (isLockingUnavailableError(error)) {
@@ -250,20 +283,19 @@ export async function getLockState(
 
   return {
     locking: 'enabled',
-    lock: data ? toEditLock(data as LockRow) : null,
+    lock: data && typeof data === 'object' ? toEditLock(data as LockRow) : null,
   };
 }
 
 /**
  * The post's current unexpired lock, or null (also when locking is
- * unavailable). `now` is injectable for tests.
+ * unavailable).
  */
 export async function getLock(
   db: SupabaseClient,
   postId: string,
-  now: string = new Date().toISOString(),
 ): Promise<EditLock | null> {
-  return (await getLockState(db, postId, now)).lock;
+  return (await getLockState(db, postId)).lock;
 }
 
 /**
