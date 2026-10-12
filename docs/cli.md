@@ -33,8 +33,8 @@ The HTTP API underneath is specified in [`docs/cli-api.md`](./cli-api.md).
 | Scope | Lets the token… |
 |---|---|
 | `posts:read` | list and read posts, including drafts |
-| `posts:write` | create drafts, and edit posts that **aren't** published |
-| `posts:publish` | publish/unpublish, edit already-published posts, create posts as published |
+| `posts:write` | create drafts, and edit posts that are **neither published nor scheduled** |
+| `posts:publish` | publish now, schedule, unpublish/unschedule, edit published or scheduled posts, create posts as published or scheduled |
 | `posts:delete` | delete posts |
 | `categories:write` | create, rename, and delete categories |
 | `media:upload` | upload images |
@@ -89,7 +89,8 @@ slug: my-post
 category: news            # category slug
 excerpt: One-line summary
 featured_image: https://…/cover.png   # or a relative path to a local file
-status: draft             # draft | published
+status: draft             # draft | scheduled | published
+publish_at: 2026-10-20T09:00:00+08:00  # only for status: scheduled
 updated_at: 2026-10-06T12:00:00.123456+00:00   # read-only; used for conflict detection
 ---
 ```
@@ -98,7 +99,35 @@ updated_at: 2026-10-06T12:00:00.123456+00:00   # read-only; used for conflict de
   change if someone else edited the post since you pulled it.
 - **Use `--write-back`** so the file gets the new `updated_at`. Otherwise your next push of the same
   file conflicts.
-- Changing `status` or editing a published post needs `posts:publish`.
+- Changing `status` or editing a published **or scheduled** post needs `posts:publish`.
+
+### Scheduling a post
+
+`published_at` is the single source of truth: `status` is never stored, it is derived (null =
+draft, in the future = scheduled, otherwise published). Scheduling therefore needs `posts:publish` —
+a draft-only token cannot schedule or reschedule anything.
+
+```sh
+# From a file's front matter (`status: scheduled` + `publish_at`):
+pawpress posts push scheduled-post.md --write-back --json
+
+# Or directly, without editing front matter:
+pawpress posts push scheduled-post.md --at 2026-10-20T09:00:00+08:00 --json
+pawpress posts create --title "T" --category news --file body.md --at 2026-10-20T09:00:00+08:00 --json
+pawpress posts publish <id> --at 2026-10-20T09:00:00+08:00 --json   # reschedule
+```
+
+- Times **must be explicit**: an ISO-8601 timestamp with a `Z` or a numeric offset
+  (`2026-10-20T09:00:00+08:00`), strictly in the future. A bare local time like
+  `2026-10-20T09:00:00` is rejected locally (exit 2). The server stores UTC and will accept times at
+  most 365 days ahead.
+- `--publish` still means "publish now" and cannot be combined with `--at` (exit 2).
+- To **cancel** a schedule, unpublish it and it becomes a draft again:
+  `pawpress posts unpublish <id> --json`.
+- A scheduled post counts as published for permissions: editing its content also needs
+  `posts:publish`.
+- Scheduled posts stay hidden from the public site (and the anonymous API) until they go live; their
+  URL returns 404 until then.
 
 ### Creating a post
 
@@ -146,14 +175,14 @@ A single text block (a run of consecutive non-blank lines, i.e. one paragraph) m
 ```
 pawpress auth login --url <site>        # token from stdin
 pawpress auth status | logout
-pawpress posts list [--status draft|published|all] [--category <slug>] [--search <q>] [--limit N] [--offset N]
+pawpress posts list [--status draft|scheduled|published|all] [--category <slug>] [--search <q>] [--limit N] [--offset N]
 pawpress posts get <id|slug> [--format markdown|lexical|html] [-o file]
 pawpress posts pull <id|slug> [-o file.md]
-pawpress posts push <file.md> [--publish] [--dry-run] [--force] [--write-back] [--allow-outside-dir]
-pawpress posts create --title T --category C [--slug S] [--excerpt E] (--file f.md | --stdin) [--publish] [--dry-run] [--allow-outside-dir]
+pawpress posts push <file.md> [--publish] [--at <ISO>] [--dry-run] [--force] [--write-back] [--allow-outside-dir]
+pawpress posts create --title T --category C [--slug S] [--excerpt E] (--file f.md | --stdin) [--publish] [--at <ISO>] [--dry-run] [--allow-outside-dir]
 pawpress posts update <id> [--title T] [--slug S] [--excerpt E] [--category C] [--featured-image URL]
                            [--file f.md | --stdin] [--if-updated-at ts] [--dry-run] [--allow-outside-dir]
-pawpress posts publish <id> | unpublish <id>
+pawpress posts publish <id> [--at <ISO>] | unpublish <id>
 pawpress posts delete <id> --yes [--dry-run]
 pawpress categories list
 pawpress categories create --name N --slug S --description D [--dry-run]
