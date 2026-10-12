@@ -3,13 +3,14 @@ import Link from 'next/link';
 import { Metadata } from 'next';
 import { Post } from '@/lib/types';
 import { isPubliclyVisible } from '@/lib/cms/status';
+import { restEq } from '@/lib/supabaseRest';
 
 // Reserved slugs that should not match post routes
 const RESERVED_SLUGS = ['admin', 'api', 'category', 'posts', 'styles'];
 
 async function getPost(slug: string): Promise<Post | null> {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/posts?slug=eq.${slug}`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/posts?${restEq('slug', slug)}`, {
       headers: {
         'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
@@ -34,7 +35,7 @@ async function getPost(slug: string): Promise<Post | null> {
 
     // Fetch category data if post has category_id
     if (post.category_id) {
-      const categoryResponse = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/categories?id=eq.${post.category_id}`, {
+      const categoryResponse = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/categories?${restEq('id', String(post.category_id))}`, {
         headers: {
           'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
           'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
