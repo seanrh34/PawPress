@@ -44,6 +44,7 @@ export async function proxy(request: NextRequest) {
       '/admin/posts/new',
       '/admin/users',
       '/admin/profile',
+      '/admin/tokens',
     ];
     const isEditRoute = request.nextUrl.pathname.match(/^\/admin\/posts\/[^/]+\/edit$/);
     const isMutationRoute = mutationRoutes.some(route => 

@@ -126,6 +126,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   </Link>
                 )}
                 <Link
+                  href="/admin/tokens"
+                  className={`text-md lg:text-xl font-medium transition-colors ${
+                    pathname === '/admin/tokens'
+                      ? 'text-blue-600'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  API Tokens
+                </Link>
+                <Link
                   href="/admin/profile"
                   className={`text-md lg:text-xl font-medium transition-colors ${
                     pathname === '/admin/profile'
@@ -219,6 +229,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 Manage Users
               </Link>
             )}
+            <Link
+              href="/admin/tokens"
+              className={`text-sm font-medium whitespace-nowrap ${
+                pathname === '/admin/tokens'
+                  ? 'text-blue-600'
+                  : 'text-gray-600'
+              }`}
+            >
+              API Tokens
+            </Link>
             <Link
               href="/admin/profile"
               className={`text-sm font-medium whitespace-nowrap ${
