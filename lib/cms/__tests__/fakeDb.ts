@@ -20,6 +20,7 @@ export interface FakeQuery extends PromiseLike<FakeResult> {
   eq(...args: unknown[]): FakeQuery;
   is(...args: unknown[]): FakeQuery;
   not(...args: unknown[]): FakeQuery;
+  gt(...args: unknown[]): FakeQuery;
   ilike(...args: unknown[]): FakeQuery;
   gt(...args: unknown[]): FakeQuery;
   gte(...args: unknown[]): FakeQuery;
@@ -44,11 +45,18 @@ export interface RecordedUpload {
   options: unknown;
 }
 
+export interface RecordedRpcCall {
+  fn: string;
+  args: Record<string, unknown>;
+}
+
 export interface FakeDb {
   client: SupabaseClient;
   calls: RecordedCall[];
   uploads: RecordedUpload[];
+  rpcCalls: RecordedRpcCall[];
   setUploadResult(result: FakeResult): void;
+  enqueueRpc(fn: string, ...results: FakeResult[]): void;
   callsFor(table: string, method: string): RecordedCall[];
 }
 
@@ -65,6 +73,9 @@ export function makeDb(queue: Record<string, FakeResult[]> = {}): FakeDb {
     remaining.set(table, [...results]);
   }
 
+  const rpcQueues = new Map<string, FakeResult[]>();
+  const rpcCalls: RecordedRpcCall[] = [];
+
   const uploads: RecordedUpload[] = [];
   let uploadResult: FakeResult = {
     data: { path: 'generated.png' },
@@ -73,6 +84,14 @@ export function makeDb(queue: Record<string, FakeResult[]> = {}): FakeDb {
 
   function take(table: string): FakeResult {
     const list = remaining.get(table);
+    if (list && list.length > 0) {
+      return list.shift() as FakeResult;
+    }
+    return { data: null, error: null };
+  }
+
+  function takeRpc(fn: string): FakeResult {
+    const list = rpcQueues.get(fn);
     if (list && list.length > 0) {
       return list.shift() as FakeResult;
     }
@@ -107,6 +126,10 @@ export function makeDb(queue: Record<string, FakeResult[]> = {}): FakeDb {
       },
       not(...args) {
         calls.push({ table, method: 'not', args });
+        return chain;
+      },
+      gt(...args) {
+        calls.push({ table, method: 'gt', args });
         return chain;
       },
       ilike(...args) {
@@ -161,6 +184,10 @@ export function makeDb(queue: Record<string, FakeResult[]> = {}): FakeDb {
     from(table: string): FakeQuery {
       return makeChain(table);
     },
+    rpc(fn: string, args: Record<string, unknown> = {}) {
+      rpcCalls.push({ fn, args });
+      return Promise.resolve(takeRpc(fn));
+    },
     storage: {
       from(bucket: string) {
         return {
@@ -182,8 +209,14 @@ export function makeDb(queue: Record<string, FakeResult[]> = {}): FakeDb {
     client,
     calls,
     uploads,
+    rpcCalls,
     setUploadResult(result: FakeResult) {
       uploadResult = result;
+    },
+    enqueueRpc(fn: string, ...results: FakeResult[]) {
+      const list = rpcQueues.get(fn) ?? [];
+      list.push(...results);
+      rpcQueues.set(fn, list);
     },
     callsFor(table: string, method: string) {
       return calls.filter((call) => call.table === table && call.method === method);
