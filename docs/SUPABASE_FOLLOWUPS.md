@@ -109,27 +109,29 @@ the host's edge config), e.g. `default-src 'self'`, `img-src 'self' https: data:
 and inline bootstrap scripts, so start in report-only mode and tune before enforcing. This has **not**
 been added yet.
 
-## (i) Hide scheduled posts from the public read policy — security
+## (i) Apply the scheduling and edit-lock migrations
 
-The anon RLS read policy on `posts` is `published_at IS NOT NULL`. That treats a **scheduled** post
-(`published_at` in the future) as public, so its full row — including `content_html` and
-`content_lexical` — is readable by anyone who queries Supabase's REST API directly with the public
-anon key. The app hides future posts in every public query and 404s their pages, but the database
-policy does not.
+Two migrations ship with the app but are **not** applied automatically. Apply them in the Supabase SQL
+editor (or `supabase db push`):
 
-Change the policy to also require the timestamp to be in the past:
+1. **`supabase/migrations/20261012000100_hide_scheduled_posts.sql` — security, apply BEFORE using
+   scheduling.** Until it is applied the anon RLS read policy on `posts` (`published_at IS NOT NULL`)
+   treats a **scheduled** post (`published_at` in the future) as public, so its full row — including
+   `content_html` and `content_lexical` — is readable by anyone querying Supabase's REST API directly
+   with the public anon key. The migration changes the policy to
+   `published_at is not null and published_at <= now()`; `now()` is evaluated per query, so a scheduled
+   post becomes readable the moment it goes live. The service-role client used by `/api/v1` bypasses
+   RLS and is unaffected.
+2. **`supabase/migrations/20261012000000_post_edit_locks.sql` — apply to enable edit locks.** Until it
+   is applied, lock endpoints report `locking: "unavailable"` and only `if_updated_at` protects
+   against conflicting edits. The migration adds the `post_edit_locks` table plus the
+   `acquire_post_edit_lock` and `get_post_edit_lock` RPCs (the 5-lock cap per agent user and a
+   DB-clock expiry check live in the RPCs).
 
-```sql
--- Drop the old public read policy (name may differ; check Storage > Policies).
-drop policy if exists "Public posts are viewable by everyone" on public.posts;
+### Known limitation: the web editor's "Overwrite" bypasses conflicts
 
-create policy "Public can read published posts"
-  on public.posts
-  for select
-  to anon, authenticated
-  using (published_at is not null and published_at <= now());
-```
-
-`now()` is evaluated per query, so a scheduled post becomes readable the moment it goes live without
-any cron job. The service-role client used by `/api/v1` bypasses RLS and is unaffected. Do not run
-this automatically — apply it in the Supabase SQL editor.
+When a save conflicts, the web editor offers **"Overwrite their changes"**. Choosing it deliberately
+skips sending `if_updated_at`, so the human's save wins over a concurrent agent edit without further
+conflict detection (the edit lock is still re-checked first). This is intentional — a logged-in admin
+can always force their change — but means the last-writer-wins path is available to humans only, not
+agents.

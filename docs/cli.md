@@ -116,14 +116,22 @@ and continues.
   `error: not editing: <message>` naming them (JSON: `error.code` is `"locked"` and
   `error.details.holder` says who). Do **not** retry in a loop and do **not** try to force your way
   in: report it and try again on the next scheduled run.
+- If the token can't edit the post (it's published/scheduled and the token lacks `posts:publish`),
+  `pull` prints `not locking: this token can't edit this post` on stderr and continues **without** a
+  lock; `posts lock` still fails with exit 3.
+- An agent may hold at most **5 locks** per user. A sixth `pull` (or `lock`) exits **5** with the
+  server message `Too many active edit locks for this user (max 5); release some with pawpress posts
+  unlock`. Release one with `pawpress posts unlock <id> --session <uuid>` and retry.
 - `push` sends `lock_session` and releases the lock on success. Use `--keep-lock` for a long edit and
   renew it with `pawpress posts lock <id|slug> --session <uuid>`; release it early with
   `pawpress posts unlock <id> --session <uuid>`. `--no-lock` on `pull` skips locking entirely.
 - If you lose the lock to an admin takeover, `push` exits **5** with
   `error: failed to apply edits: an admin took over editing; your changes are still in <file>`.
   Your file is not modified.
-- `posts update`, `publish`, `unpublish` and `delete` send no lock session, so any active edit lock by
-  someone else refuses them with `error: <verb> refused: <message>` (exit 5).
+- While you hold a lock, pass `--session <uuid>` to `posts update`, `publish`, `unpublish` and
+  `delete` so your own lock doesn't refuse you (`posts update --file f.md` also reads the
+  `lock_session` from that file's front matter). Without it, any active lock held by someone else
+  refuses them with `error: <verb> refused: <message>` (exit 5).
 
 ### Scheduling a post
 
@@ -211,9 +219,9 @@ pawpress posts pull <id|slug> [-o file.md] [--lock-ttl <s>] [--no-lock]
 pawpress posts push <file.md> [--publish] [--at <ISO>] [--dry-run] [--force] [--write-back] [--keep-lock] [--allow-outside-dir]
 pawpress posts create --title T --category C [--slug S] [--excerpt E] (--file f.md | --stdin) [--publish] [--at <ISO>] [--dry-run] [--allow-outside-dir]
 pawpress posts update <id> [--title T] [--slug S] [--excerpt E] [--category C] [--featured-image URL]
-                           [--file f.md | --stdin] [--if-updated-at ts] [--dry-run] [--allow-outside-dir]
-pawpress posts publish <id> [--at <ISO>] | unpublish <id>
-pawpress posts delete <id> --yes [--dry-run]
+                           [--file f.md | --stdin] [--if-updated-at ts] [--session <uuid>] [--dry-run] [--allow-outside-dir]
+pawpress posts publish <id> [--at <ISO>] [--session <uuid>] | unpublish <id> [--session <uuid>]
+pawpress posts delete <id> --yes [--session <uuid>] [--dry-run]
 pawpress posts lock <id|slug> [--ttl <s>] [--session <uuid>]
 pawpress posts unlock <id> --session <uuid>
 pawpress categories list
