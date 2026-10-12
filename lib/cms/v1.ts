@@ -14,6 +14,7 @@ import { markdownToLexical, lexicalToMarkdown, findDisallowedNodeTypes, normaliz
 import { ApiError } from './errors';
 import { getPostById, type PostCategory, type PostRow } from './postService';
 import { postStatus, type PostStatus } from './status';
+import { parseStrictIsoTimestamp } from './timestamp';
 import { MAX_SLUG_LENGTH } from './slug';
 
 /**
@@ -24,13 +25,6 @@ import { MAX_SLUG_LENGTH } from './slug';
 
 export const MAX_MARKDOWN_CHARS = 200_000;
 export const MAX_LEXICAL_BYTES = 2 * 1024 * 1024;
-
-/**
- * An ISO-8601 timestamp with an explicit UTC offset or `Z`. Local times
- * (no offset) are rejected so a schedule is unambiguous.
- */
-const ISO_OFFSET_PATTERN =
-  /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})$/;
 
 const MAX_SCHEDULE_MS = 365 * 24 * 60 * 60 * 1000;
 
@@ -454,16 +448,18 @@ export function parsePublishAt(
   field = 'publish_at',
   now: Date = new Date(),
 ): Date {
-  const formatMessage = `${field} must be an ISO-8601 timestamp with an explicit offset or Z (e.g. 2026-10-20T09:00:00+08:00)`;
+  const formatMessage = `${field} must be a valid ISO-8601 timestamp with an explicit offset or Z (e.g. 2026-10-20T09:00:00+08:00)`;
 
-  if (!ISO_OFFSET_PATTERN.test(value)) {
+  if (typeof value !== 'string') {
     throw invalidPublishAt(field, formatMessage);
   }
 
-  const parsed = Date.parse(value);
-  if (Number.isNaN(parsed)) {
+  const date = parseStrictIsoTimestamp(value);
+  if (date === null) {
     throw invalidPublishAt(field, formatMessage);
   }
+
+  const parsed = date.getTime();
 
   if (parsed <= now.getTime()) {
     throw invalidPublishAt(field, `${field} must be in the future`);

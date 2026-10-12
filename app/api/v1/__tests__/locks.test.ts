@@ -310,11 +310,37 @@ describe('POST /posts/:id/lock', () => {
     expect(db.rpcCalls).toHaveLength(0);
   });
 
+  it('reports the agent lock cap as a 409 conflict', async () => {
+    const token = await issueToken(['posts:write']);
+    db.enqueue('posts', { data: postRow() });
+    db.enqueueRpc('acquire_post_edit_lock', {
+      data: { acquired: false, reason: 'too_many_locks', limit: 5, lock: null },
+      error: null,
+    });
+
+    const response = await lockPost(
+      withToken(`${BASE}/posts/${UUID}/lock`, 'POST', token, { body: {} }),
+      ctxFor(UUID),
+    );
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body.error.code).toBe('conflict');
+    expect(body.error.message).toContain('Too many active edit locks');
+    expect(body.error.details).toEqual({ reason: 'too_many_locks', limit: 5 });
+  });
+
   it('degrades gracefully when locking is unavailable', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const token = await issueToken(['posts:write']);
     db.enqueue('posts', { data: postRow() });
-    db.enqueueRpc('acquire_post_edit_lock', { data: null, error: { code: 'PGRST202' } });
+    db.enqueueRpc('acquire_post_edit_lock', {
+      data: null,
+      error: {
+        code: 'PGRST202',
+        message:
+          'Could not find the function public.acquire_post_edit_lock in the schema cache',
+      },
+    });
 
     const response = await lockPost(
       withToken(`${BASE}/posts/${UUID}/lock`, 'POST', token, { body: {} }),
@@ -367,7 +393,7 @@ describe('GET /posts/:id edit_lock', () => {
   it('exposes the lock without the session id to other viewers', async () => {
     const token = await issueToken(['posts:read']);
     db.enqueue('posts', { data: postRow() });
-    db.enqueue('post_edit_locks', { data: lockRow(), error: null });
+    db.enqueueRpc('get_post_edit_lock', { data: lockRow(), error: null });
 
     const response = await postGet(withToken(`${BASE}/posts/${UUID}`, 'GET', token), ctxFor(UUID));
     expect(response.status).toBe(200);
@@ -380,7 +406,7 @@ describe('GET /posts/:id edit_lock', () => {
   it('keeps the session id for the owning session', async () => {
     const token = await issueToken(['posts:read']);
     db.enqueue('posts', { data: postRow() });
-    db.enqueue('post_edit_locks', { data: lockRow(), error: null });
+    db.enqueueRpc('get_post_edit_lock', { data: lockRow(), error: null });
 
     const response = await postGet(
       withToken(`${BASE}/posts/${UUID}`, 'GET', token, { lockSession: SESSION }),
@@ -394,7 +420,13 @@ describe('GET /posts/:id edit_lock', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const token = await issueToken(['posts:read']);
     db.enqueue('posts', { data: postRow() });
-    db.enqueue('post_edit_locks', { data: null, error: { code: '42P01' } });
+    db.enqueueRpc('get_post_edit_lock', {
+      data: null,
+      error: {
+        code: '42P01',
+        message: 'relation "public.post_edit_locks" does not exist',
+      },
+    });
 
     const response = await postGet(withToken(`${BASE}/posts/${UUID}`, 'GET', token), ctxFor(UUID));
     const body = await response.json();
@@ -411,7 +443,7 @@ describe('token mutations respect edit locks', () => {
   it('blocks PATCH while a human holds the lock', async () => {
     const token = await writeToken();
     db.enqueue('posts', { data: postRow() });
-    db.enqueue('post_edit_locks', { data: lockRow(), error: null });
+    db.enqueueRpc('get_post_edit_lock', { data: lockRow(), error: null });
 
     const response = await postPatch(
       withToken(`${BASE}/posts/${UUID}`, 'PATCH', token, { body: { title: 'New' } }),
@@ -425,7 +457,7 @@ describe('token mutations respect edit locks', () => {
   it('allows PATCH with the matching session and user', async () => {
     const token = await writeToken();
     db.enqueue('posts', { data: postRow() }, { data: postRow() });
-    db.enqueue('post_edit_locks', { data: lockRow(), error: null });
+    db.enqueueRpc('get_post_edit_lock', { data: lockRow(), error: null });
     db.enqueue('posts', { data: barePostRow({ title: 'New' }) }, { data: postRow({ title: 'New' }) });
 
     const response = await postPatch(
@@ -441,7 +473,7 @@ describe('token mutations respect edit locks', () => {
   it('reports taken_over when the session was replaced by an admin', async () => {
     const token = await writeToken();
     db.enqueue('posts', { data: postRow() });
-    db.enqueue('post_edit_locks', { data: lockRow({ session_id: SESSION }), error: null });
+    db.enqueueRpc('get_post_edit_lock', { data: lockRow({ session_id: SESSION }), error: null });
 
     const response = await postPatch(
       withToken(`${BASE}/posts/${UUID}`, 'PATCH', token, {
@@ -459,14 +491,16 @@ describe('token mutations respect edit locks', () => {
 
   it('blocks publish, unpublish and delete while a lock is held', async () => {
     const token = await writeToken();
-    db.enqueue('post_edit_locks', { data: lockRow(), error: null });
+    db.enqueue('posts', { data: postRow() });
+    db.enqueueRpc('get_post_edit_lock', { data: lockRow(), error: null });
     const publish = await publishPostRoute(
       withToken(`${BASE}/posts/${UUID}/publish`, 'POST', token),
       ctxFor(UUID),
     );
     expect(publish.status).toBe(409);
 
-    db.enqueue('post_edit_locks', { data: lockRow(), error: null });
+    db.enqueue('posts', { data: postRow() });
+    db.enqueueRpc('get_post_edit_lock', { data: lockRow(), error: null });
     const unpublish = await unpublishPostRoute(
       withToken(`${BASE}/posts/${UUID}/unpublish`, 'POST', token),
       ctxFor(UUID),
@@ -474,7 +508,8 @@ describe('token mutations respect edit locks', () => {
     expect(unpublish.status).toBe(409);
 
     const deleteToken = await issueToken(['posts:delete']);
-    db.enqueue('post_edit_locks', { data: lockRow(), error: null });
+    db.enqueue('posts', { data: postRow() });
+    db.enqueueRpc('get_post_edit_lock', { data: lockRow(), error: null });
     const deleted = await postDelete(
       withToken(`${BASE}/posts/${UUID}`, 'DELETE', deleteToken),
       ctxFor(UUID),
@@ -486,9 +521,22 @@ describe('token mutations respect edit locks', () => {
   it('allows a mutation when locking is unavailable', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const token = await writeToken();
-    db.enqueue('posts', { data: postRow() }, { data: barePostRow({ published_at: T1 }) });
-    db.enqueue('post_edit_locks', { data: null, error: { code: 'PGRST205' } });
-    db.enqueue('posts', { data: postRow({ published_at: T1 }) });
+    // route read, then publish service read/update/ensure re-read.
+    db.enqueue(
+      'posts',
+      { data: postRow() },
+      { data: postRow() },
+      { data: barePostRow({ published_at: T1 }) },
+      { data: postRow({ published_at: T1 }) },
+    );
+    db.enqueueRpc('get_post_edit_lock', {
+      data: null,
+      error: {
+        code: 'PGRST205',
+        message:
+          "Could not find the table 'public.post_edit_locks' in the schema cache",
+      },
+    });
 
     const response = await publishPostRoute(
       withToken(`${BASE}/posts/${UUID}/publish`, 'POST', token),

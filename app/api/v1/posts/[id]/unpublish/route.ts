@@ -4,7 +4,7 @@ import { lockSessionFromHeader } from '@/lib/api/lockSession';
 import { ApiError } from '@/lib/cms/errors';
 import { isUuid } from '@/lib/cms/categoryService';
 import { assertNoForeignLock } from '@/lib/cms/lockService';
-import { unpublishPost } from '@/lib/cms/postService';
+import { getPostById, unpublishPost } from '@/lib/cms/postService';
 import { ensurePostCategory, toPostResource } from '@/lib/cms/v1';
 
 export const runtime = 'nodejs';
@@ -17,6 +17,11 @@ export const POST = withApi<{ id: string }>(
       throw ApiError.notFound('Post not found');
     }
 
+    const current = await getPostById(ctx.auth.db, id);
+    if (!current) {
+      throw ApiError.notFound('Post not found');
+    }
+
     await assertNoForeignLock(
       ctx.auth.db,
       id,
@@ -24,7 +29,9 @@ export const POST = withApi<{ id: string }>(
       ctx.auth.userId,
     );
 
-    const unpublished = await unpublishPost(ctx.auth.db, id);
+    const unpublished = await unpublishPost(ctx.auth.db, id, {
+      ifUpdatedAt: current.updated_at,
+    });
     const post = await ensurePostCategory(ctx.auth.db, unpublished);
     audit(ctx, 'post.unpublish', 'post', post.id);
 

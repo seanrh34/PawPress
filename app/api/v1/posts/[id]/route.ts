@@ -138,6 +138,11 @@ export const DELETE = withApi<{ id: string }>(
       throw ApiError.notFound('Post not found');
     }
 
+    const current = await getPostById(ctx.auth.db, id);
+    if (!current) {
+      throw ApiError.notFound('Post not found');
+    }
+
     await assertNoForeignLock(
       ctx.auth.db,
       id,
@@ -145,7 +150,9 @@ export const DELETE = withApi<{ id: string }>(
       ctx.auth.userId,
     );
 
-    await deletePost(ctx.auth.db, id);
+    // Bind the delete to the revision we just checked, so a concurrent edit
+    // between the check and the delete becomes a conflict.
+    await deletePost(ctx.auth.db, id, { ifUpdatedAt: current.updated_at });
     audit(ctx, 'post.delete', 'post', id);
 
     return NextResponse.json({ deleted: true, id });

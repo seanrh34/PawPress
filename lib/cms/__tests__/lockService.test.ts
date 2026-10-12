@@ -86,34 +86,62 @@ describe('holderLabel', () => {
     const label = holderLabel('agent', USER_LABEL, 'x'.repeat(300));
     expect(label).toHaveLength(200);
   });
+
+  it('strips control characters from the token name and email', () => {
+    const label = holderLabel(
+      'agent',
+      'ali\u0007ce@example.com',
+      'week\u0000ly\u001b-writer',
+    );
+    expect(label).toBe('agent "weekly-writer" (alice@example.com)');
+    expect(label).not.toContain('\u0000');
+    expect(label).not.toContain('\u0007');
+    expect(label).not.toContain('\u001b');
+  });
 });
 
 describe('isLockingUnavailableError', () => {
-  it('recognises the missing-table/function codes', () => {
-    for (const code of ['42P01', '42883', 'PGRST202', 'PGRST205']) {
-      expect(isLockingUnavailableError({ code })).toBe(true);
+  it('recognises missing-table codes only when the message names the table', () => {
+    for (const code of ['42P01', 'PGRST205']) {
+      expect(
+        isLockingUnavailableError({
+          code,
+          message: 'relation "public.post_edit_locks" does not exist',
+        }),
+      ).toBe(true);
+      // Same code but a different missing relation is a real failure.
+      expect(
+        isLockingUnavailableError({
+          code,
+          message: 'relation "public.other_table" does not exist',
+        }),
+      ).toBe(false);
     }
   });
 
-  it('recognises missing-object messages that name the lock objects', () => {
-    expect(
-      isLockingUnavailableError({
-        message: 'relation "public.post_edit_locks" does not exist',
-      }),
-    ).toBe(true);
-    expect(
-      isLockingUnavailableError({
-        code: 'PGRST205',
-        message:
-          "Could not find the table 'public.post_edit_locks' in the schema cache",
-      }),
-    ).toBe(true);
-    expect(
-      isLockingUnavailableError({
-        message:
-          'Could not find the function public.acquire_post_edit_lock(...) in the schema cache',
-      }),
-    ).toBe(true);
+  it('recognises missing-function codes only when the message names the RPC', () => {
+    for (const code of ['42883', 'PGRST202']) {
+      expect(
+        isLockingUnavailableError({
+          code,
+          message:
+            'Could not find the function public.acquire_post_edit_lock(...) in the schema cache',
+        }),
+      ).toBe(true);
+      expect(
+        isLockingUnavailableError({
+          code,
+          message:
+            'Could not find the function public.get_post_edit_lock(...) in the schema cache',
+        }),
+      ).toBe(true);
+      expect(
+        isLockingUnavailableError({
+          code,
+          message: 'Could not find the function public.other_fn(...)',
+        }),
+      ).toBe(false);
+    }
   });
 
   it('does not treat unrelated errors as unavailable', () => {
@@ -125,6 +153,13 @@ describe('isLockingUnavailableError', () => {
       isLockingUnavailableError({
         message: 'post_edit_locks operation failed',
       }),
+    ).toBe(false);
+    // A code without any message can't be confirmed as the missing migration.
+    expect(isLockingUnavailableError({ code: '42P01' })).toBe(false);
+    expect(isLockingUnavailableError({ code: 'PGRST202' })).toBe(false);
+    // A genuine failure with the missing-table code but unrelated text.
+    expect(
+      isLockingUnavailableError({ code: '42501', message: 'permission denied' }),
     ).toBe(false);
   });
 });
@@ -222,6 +257,35 @@ describe('acquireLock', () => {
     expect(db.rpcCalls[0].args.p_force).toBe(true);
   });
 
+  it('maps the agent lock cap to a conflict', async () => {
+    const db = makeDb();
+    db.enqueueRpc('acquire_post_edit_lock', {
+      data: { acquired: false, reason: 'too_many_locks', limit: 5, lock: null },
+      error: null,
+    });
+
+    const error = await acquireLock(db.client, {
+      ...baseOptions,
+      holder: { kind: 'agent', userId: 'user-1', label: AGENT_LABEL },
+    }).catch((caught: unknown) => caught);
+
+    const apiError = expectApiError(error, 'conflict');
+    expect(apiError.status).toBe(409);
+    expect(apiError.message).toContain('Too many active edit locks');
+    expect(apiError.details).toEqual({ reason: 'too_many_locks', limit: 5 });
+  });
+
+  it('does not map too_many_locks for a human caller', async () => {
+    const db = makeDb();
+    db.enqueueRpc('acquire_post_edit_lock', {
+      data: { acquired: false, reason: 'too_many_locks', limit: 5, lock: null },
+      error: null,
+    });
+
+    const result = await acquireLock(db.client, baseOptions);
+    expect(result).toEqual({ locking: 'enabled', acquired: false, lock: null });
+  });
+
   it('rejects a ttl outside the allowed range before calling the RPC', async () => {
     for (const ttlSeconds of [MIN_LOCK_TTL_SECONDS - 1, MAX_LOCK_TTL_SECONDS + 1, 10.5, NaN]) {
       const db = makeDb();
@@ -237,15 +301,21 @@ describe('acquireLock', () => {
 });
 
 describe('graceful degradation', () => {
-  it('recognises every unavailable code and warns only once per process', async () => {
+  const missingFunction = {
+    code: 'PGRST202',
+    message:
+      'Could not find the function public.acquire_post_edit_lock in the schema cache',
+  };
+
+  it('recognises an unavailable RPC and warns only once per process', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.resetModules();
     const lock = await import('../lockService');
     const db = makeDb();
     db.enqueueRpc(
       'acquire_post_edit_lock',
-      { data: null, error: { code: 'PGRST202' } },
-      { data: null, error: { code: 'PGRST202' } },
+      { data: null, error: { ...missingFunction } },
+      { data: null, error: { ...missingFunction } },
     );
 
     const first = await lock.acquireLock(db.client, baseOptions);
@@ -256,43 +326,76 @@ describe('graceful degradation', () => {
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
-  it.each(['42P01', '42883', 'PGRST202', 'PGRST205'])(
-    'treats %s as unavailable on acquire',
-    async (code) => {
-      vi.spyOn(console, 'warn').mockImplementation(() => {});
-      vi.resetModules();
-      const lock = await import('../lockService');
-      const db = makeDb();
-      db.enqueueRpc('acquire_post_edit_lock', {
-        data: null,
-        error: { code },
-      });
+  it('treats the missing-table code as unavailable on acquire', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.resetModules();
+    const lock = await import('../lockService');
+    const db = makeDb();
+    db.enqueueRpc('acquire_post_edit_lock', {
+      data: null,
+      error: {
+        code: '42P01',
+        message: 'relation "public.post_edit_locks" does not exist',
+      },
+    });
 
-      expect(await lock.acquireLock(db.client, baseOptions)).toEqual({
-        locking: 'unavailable',
-        acquired: false,
-        lock: null,
-      });
-    },
-  );
+    expect(await lock.acquireLock(db.client, baseOptions)).toEqual({
+      locking: 'unavailable',
+      acquired: false,
+      lock: null,
+    });
+  });
+
+  it('fails closed (internal) for an unrecognised error', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const db = makeDb();
+    db.enqueueRpc('acquire_post_edit_lock', {
+      data: null,
+      error: { code: '42501', message: 'permission denied for table post_edit_locks' },
+    });
+
+    const error = await acquireLock(db.client, baseOptions).catch(
+      (caught: unknown) => caught,
+    );
+    expectApiError(error, 'internal');
+  });
 
   it('getLock returns null when locking is unavailable', async () => {
-    const db = makeDb({
-      post_edit_locks: [{ data: null, error: { code: '42P01' } }],
+    const db = makeDb();
+    db.enqueueRpc('get_post_edit_lock', {
+      data: null,
+      error: {
+        code: '42P01',
+        message: 'relation "public.post_edit_locks" does not exist',
+      },
     });
     await expect(getLock(db.client, 'post-1')).resolves.toBeNull();
   });
 
   it('releaseLock returns false when locking is unavailable', async () => {
     const db = makeDb({
-      post_edit_locks: [{ data: null, error: { code: '42P01' } }],
+      post_edit_locks: [
+        {
+          data: null,
+          error: {
+            code: '42P01',
+            message: 'relation "public.post_edit_locks" does not exist',
+          },
+        },
+      ],
     });
     await expect(releaseLock(db.client, 'post-1', SESSION_ID)).resolves.toBe(false);
   });
 
   it('assertNoForeignLock passes when locking is unavailable', async () => {
-    const db = makeDb({
-      post_edit_locks: [{ data: null, error: { code: 'PGRST205' } }],
+    const db = makeDb();
+    db.enqueueRpc('get_post_edit_lock', {
+      data: null,
+      error: {
+        code: 'PGRST205',
+        message:
+          "Could not find the table 'public.post_edit_locks' in the schema cache",
+      },
     });
     await expect(
       assertNoForeignLock(db.client, 'post-1', SESSION_ID),
@@ -301,28 +404,29 @@ describe('graceful degradation', () => {
 });
 
 describe('getLock', () => {
-  it('returns null when there is no lock', async () => {
-    const db = makeDb({ post_edit_locks: [{ data: null, error: null }] });
+  it('returns null when the RPC returns null', async () => {
+    const db = makeDb();
+    db.enqueueRpc('get_post_edit_lock', { data: null, error: null });
     await expect(getLock(db.client, 'post-1')).resolves.toBeNull();
   });
 
   it('maps a returned row', async () => {
-    const db = makeDb({ post_edit_locks: [{ data: row(), error: null }] });
+    const db = makeDb();
+    db.enqueueRpc('get_post_edit_lock', { data: row(), error: null });
     await expect(getLock(db.client, 'post-1')).resolves.toEqual(editLock());
   });
 
-  it('excludes expired leases in the query', async () => {
-    const db = makeDb({ post_edit_locks: [{ data: null, error: null }] });
-    await getLock(db.client, 'post-1', '2030-01-01T00:00:00.000Z');
+  it('reads through the DB-clock RPC, not an app-clock query', async () => {
+    const db = makeDb();
+    db.enqueueRpc('get_post_edit_lock', { data: null, error: null });
+    await getLock(db.client, 'post-1');
 
-    expect(db.callsFor('post_edit_locks', 'eq')[0].args).toEqual([
-      'post_id',
-      'post-1',
-    ]);
-    expect(db.callsFor('post_edit_locks', 'gt')[0].args).toEqual([
-      'expires_at',
-      '2030-01-01T00:00:00.000Z',
-    ]);
+    expect(db.rpcCalls).toHaveLength(1);
+    expect(db.rpcCalls[0]).toEqual({
+      fn: 'get_post_edit_lock',
+      args: { p_post_id: 'post-1' },
+    });
+    expect(db.callsFor('post_edit_locks', 'select')).toHaveLength(0);
   });
 });
 
@@ -354,35 +458,40 @@ describe('releaseLock', () => {
 
 describe('assertNoForeignLock', () => {
   it('passes when there is no lock', async () => {
-    const db = makeDb({ post_edit_locks: [{ data: null, error: null }] });
+    const db = makeDb();
+    db.enqueueRpc('get_post_edit_lock', { data: null, error: null });
     await expect(
       assertNoForeignLock(db.client, 'post-1', undefined),
     ).resolves.toBeUndefined();
   });
 
   it('passes when the caller owns the lock', async () => {
-    const db = makeDb({ post_edit_locks: [{ data: row(), error: null }] });
+    const db = makeDb();
+    db.enqueueRpc('get_post_edit_lock', { data: row(), error: null });
     await expect(
       assertNoForeignLock(db.client, 'post-1', SESSION_ID),
     ).resolves.toBeUndefined();
   });
 
   it('passes when the session and caller user both match the holder', async () => {
-    const db = makeDb({ post_edit_locks: [{ data: row(), error: null }] });
+    const db = makeDb();
+    db.enqueueRpc('get_post_edit_lock', { data: row(), error: null });
     await expect(
       assertNoForeignLock(db.client, 'post-1', SESSION_ID, 'user-1'),
     ).resolves.toBeUndefined();
   });
 
   it('treats a matching session id from a different user as foreign', async () => {
-    const db = makeDb({ post_edit_locks: [{ data: row(), error: null }] });
+    const db = makeDb();
+    db.enqueueRpc('get_post_edit_lock', { data: row(), error: null });
     await expect(
       assertNoForeignLock(db.client, 'post-1', SESSION_ID, 'user-2'),
     ).rejects.toMatchObject({ code: 'locked' });
   });
 
   it('throws locked for a user holder when no session id is given', async () => {
-    const db = makeDb({ post_edit_locks: [{ data: row(), error: null }] });
+    const db = makeDb();
+    db.enqueueRpc('get_post_edit_lock', { data: row(), error: null });
     try {
       await assertNoForeignLock(db.client, 'post-1', undefined);
       throw new Error('expected assertNoForeignLock to throw');
@@ -403,17 +512,14 @@ describe('assertNoForeignLock', () => {
   });
 
   it('throws locked with an agent holder for a different session', async () => {
-    const db = makeDb({
-      post_edit_locks: [
-        {
-          data: row({
-            holder_kind: 'agent',
-            holder_user_id: 'user-2',
-            holder_label: AGENT_LABEL,
-          }),
-          error: null,
-        },
-      ],
+    const db = makeDb();
+    db.enqueueRpc('get_post_edit_lock', {
+      data: row({
+        holder_kind: 'agent',
+        holder_user_id: 'user-2',
+        holder_label: AGENT_LABEL,
+      }),
+      error: null,
     });
     try {
       await assertNoForeignLock(db.client, 'post-1', undefined);
@@ -431,7 +537,8 @@ describe('assertNoForeignLock', () => {
   });
 
   it('reports a takeover when the caller had a session and lost it', async () => {
-    const db = makeDb({ post_edit_locks: [{ data: row(), error: null }] });
+    const db = makeDb();
+    db.enqueueRpc('get_post_edit_lock', { data: row(), error: null });
     try {
       await assertNoForeignLock(db.client, 'post-1', 'my-old-session');
       throw new Error('expected assertNoForeignLock to throw');

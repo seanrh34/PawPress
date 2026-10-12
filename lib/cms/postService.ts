@@ -419,6 +419,29 @@ export async function updatePost(
 export interface PublishPostOptions {
   /** When given, schedule the post for this instant instead of publishing now. */
   at?: Date;
+  /**
+   * Optimistic concurrency guard: when given, the write only lands if the row
+   * still has this `updated_at`. A concurrent change becomes a `conflict`.
+   */
+  ifUpdatedAt?: string;
+}
+
+/** A conditional write that matched no row: distinguish gone from changed. */
+async function classifyMissedWrite(
+  db: SupabaseClient,
+  id: string,
+  ifUpdatedAt: string | undefined,
+): Promise<never> {
+  if (ifUpdatedAt !== undefined) {
+    const fresh = await getPostById(db, id);
+    if (!fresh) {
+      throw ApiError.notFound('Post not found');
+    }
+    throw ApiError.conflict('The post was modified by someone else', {
+      current_updated_at: fresh.updated_at,
+    });
+  }
+  throw ApiError.notFound('Post not found');
 }
 
 export async function publishPost(
@@ -446,15 +469,18 @@ export async function publishPost(
     published_at = current.published_at;
   }
 
-  const { data, error } = await db
+  let mutation = db
     .from('posts')
     .update({
       published_at,
       updated_at: new Date().toISOString(),
     })
-    .eq('id', id)
-    .select()
-    .maybeSingle();
+    .eq('id', id);
+  if (options.ifUpdatedAt !== undefined) {
+    mutation = mutation.eq('updated_at', options.ifUpdatedAt);
+  }
+
+  const { data, error } = await mutation.select().maybeSingle();
 
   if (error) {
     console.error('Failed to publish post:', error);
@@ -462,30 +488,42 @@ export async function publishPost(
   }
 
   if (!data) {
-    throw ApiError.notFound('Post not found');
+    await classifyMissedWrite(db, id, options.ifUpdatedAt);
   }
 
   return data as PostRow;
 }
 
+export interface MutatePostOptions {
+  /**
+   * Optimistic concurrency guard: when given, the write only lands if the row
+   * still has this `updated_at`. A concurrent change becomes a `conflict`.
+   */
+  ifUpdatedAt?: string;
+}
+
 export async function unpublishPost(
   db: SupabaseClient,
   id: string,
+  options: MutatePostOptions = {},
 ): Promise<PostRow> {
   const current = await getPostById(db, id);
   if (!current) {
     throw ApiError.notFound('Post not found');
   }
 
-  const { data, error } = await db
+  let mutation = db
     .from('posts')
     .update({
       published_at: null,
       updated_at: new Date().toISOString(),
     })
-    .eq('id', id)
-    .select()
-    .maybeSingle();
+    .eq('id', id);
+  if (options.ifUpdatedAt !== undefined) {
+    mutation = mutation.eq('updated_at', options.ifUpdatedAt);
+  }
+
+  const { data, error } = await mutation.select().maybeSingle();
 
   if (error) {
     console.error('Failed to unpublish post:', error);
@@ -493,7 +531,7 @@ export async function unpublishPost(
   }
 
   if (!data) {
-    throw ApiError.notFound('Post not found');
+    await classifyMissedWrite(db, id, options.ifUpdatedAt);
   }
 
   return data as PostRow;
@@ -502,16 +540,30 @@ export async function unpublishPost(
 export async function deletePost(
   db: SupabaseClient,
   id: string,
+  options: MutatePostOptions = {},
 ): Promise<void> {
-  const current = await getPostById(db, id);
-  if (!current) {
-    throw ApiError.notFound('Post not found');
+  // With an `ifUpdatedAt` guard the caller has already confirmed the post
+  // exists and read its revision, so a conditional delete + re-fetch is enough.
+  if (options.ifUpdatedAt === undefined) {
+    const current = await getPostById(db, id);
+    if (!current) {
+      throw ApiError.notFound('Post not found');
+    }
   }
 
-  const { error } = await db.from('posts').delete().eq('id', id);
+  let mutation = db.from('posts').delete().eq('id', id);
+  if (options.ifUpdatedAt !== undefined) {
+    mutation = mutation.eq('updated_at', options.ifUpdatedAt);
+  }
+
+  const { data, error } = await mutation.select();
 
   if (error) {
     console.error('Failed to delete post:', error);
     throw ApiError.internal();
+  }
+
+  if (options.ifUpdatedAt !== undefined && (!Array.isArray(data) || data.length === 0)) {
+    await classifyMissedWrite(db, id, options.ifUpdatedAt);
   }
 }

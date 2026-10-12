@@ -303,14 +303,23 @@ Rules:
   re-acquiring with the same session. An expired lock counts as free.
 - Acquiring a lock needs the same scopes as editing the post (`posts:write`, plus `posts:publish` if it's
   published or scheduled).
+- **Agents are capped at 5 locks.** A single user's agent tokens may hold at most five unexpired
+  locks across different posts. Acquiring a sixth fails with `409 conflict`, not `409 locked`:
+  `details` is `{ "reason": "too_many_locks", "limit": 5 }` and the message names the cap. Release a
+  lock with `DELETE /posts/:id/lock` (or the CLI's `pawpress posts unlock`) and retry. Humans taking
+  over (force) aren't capped.
 - **Graceful degradation:** locks live in the `post_edit_locks` table
   (`supabase/migrations/…_post_edit_locks.sql`, applied by the site owner). Until it exists, lock
   endpoints return `200 { "locking": "unavailable", "lock": null }`, mutations aren't lock-checked, and
-  `if_updated_at` is the only protection.
+  `if_updated_at` is the only protection. The lock read (`get_post_edit_lock`) and acquire
+  (`acquire_post_edit_lock`) are RPCs; a genuine database error other than "object not installed"
+  fails the request rather than silently disabling locking.
 
 ### `POST /api/v1/posts/:id/lock`
 Body `{ "session_id"?: uuid, "ttl_seconds"?: 60–3600 }`. Omit `session_id` to start a new session;
-pass it to renew your own. `200 { "locking": "enabled", "lock": Lock }`, or `409 locked`.
+pass it to renew your own. `200 { "locking": "enabled", "lock": Lock }`; `409 locked` when another
+session holds it; `409 conflict` with `details.reason: "too_many_locks"` when the caller's user is at
+the 5-lock cap.
 
 ### `DELETE /api/v1/posts/:id/lock`
 Header `X-PawPress-Lock-Session: <session_id>`. Releases your own session's lock (no-op if you don't

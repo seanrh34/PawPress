@@ -1,4 +1,5 @@
 import { Post } from "@/lib/types";
+import { restCompare, restEq } from "@/lib/supabaseRest";
 import HeroSection from "@/components/landing/HeroSection";
 import PostsSection from "@/components/landing/PostsSection";
 import PawPressSection from "@/components/landing/PawPressSection";
@@ -7,7 +8,12 @@ import ContactSection from "@/components/landing/ContactSection";
 async function getPublishedPosts(): Promise<Post[]> {
   try {
     const nowIso = new Date().toISOString();
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/posts?published_at=not.is.null&published_at=lte.${encodeURIComponent(nowIso)}&order=published_at.desc`, {
+    const query = [
+      'published_at=not.is.null',
+      restCompare('published_at', 'lte', nowIso),
+      'order=published_at.desc',
+    ].join('&');
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/posts?${query}`, {
       headers: {
         'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
@@ -26,7 +32,7 @@ async function getPublishedPosts(): Promise<Post[]> {
     const postsWithCategories = await Promise.all(
       posts.map(async (post: Post) => {
         if (post.category_id) {
-          const categoryResponse = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/categories?id=eq.${post.category_id}`, {
+          const categoryResponse = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/categories?${restEq('id', String(post.category_id))}`, {
             headers: {
               'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
               'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,

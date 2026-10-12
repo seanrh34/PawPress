@@ -65,6 +65,21 @@ describe('parsePublishAt', () => {
     expect(error.code).toBe('validation_failed');
   });
 
+  it('rejects an impossible calendar date instead of rolling it over', () => {
+    const error = caught(() =>
+      parsePublishAt('2026-11-31T00:00:00Z', 'publish_at', NOW),
+    );
+    expect(error.code).toBe('validation_failed');
+    expect(error.message).toContain('valid ISO-8601');
+  });
+
+  it('rejects T24:00:00', () => {
+    const error = caught(() =>
+      parsePublishAt('2026-07-01T24:00:00Z', 'publish_at', NOW),
+    );
+    expect(error.code).toBe('validation_failed');
+  });
+
   it('rejects a timestamp in the past or now', () => {
     expect(caught(() => parsePublishAt('2026-05-31T23:59:59Z', 'publish_at', NOW)).message).toContain(
       'future',

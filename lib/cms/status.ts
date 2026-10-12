@@ -11,14 +11,19 @@
 export type PostStatus = 'draft' | 'scheduled' | 'published';
 
 export function postStatus(
-  published_at: string | null,
+  published_at: unknown,
   now: Date = new Date(),
 ): PostStatus {
-  if (published_at === null) {
+  // Fail closed: anything that is not a parseable timestamp (including null,
+  // undefined and non-strings) is treated as a draft, never as live content.
+  if (typeof published_at !== 'string' || published_at === '') {
     return 'draft';
   }
   const ts = Date.parse(published_at);
-  if (Number.isNaN(ts) || ts <= now.getTime()) {
+  if (Number.isNaN(ts)) {
+    return 'draft';
+  }
+  if (ts <= now.getTime()) {
     return 'published';
   }
   return 'scheduled';
@@ -30,7 +35,7 @@ export function postStatus(
  * hidden until they go live.
  */
 export function isPubliclyVisible(
-  post: { published_at: string | null },
+  post: { published_at?: unknown },
   now: Date = new Date(),
 ): boolean {
   return postStatus(post.published_at, now) === 'published';

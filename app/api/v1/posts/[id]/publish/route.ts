@@ -4,7 +4,7 @@ import { lockSessionFromHeader } from '@/lib/api/lockSession';
 import { ApiError } from '@/lib/cms/errors';
 import { isUuid } from '@/lib/cms/categoryService';
 import { assertNoForeignLock } from '@/lib/cms/lockService';
-import { publishPost } from '@/lib/cms/postService';
+import { getPostById, publishPost } from '@/lib/cms/postService';
 import {
   ensurePostCategory,
   parsePublishAt,
@@ -38,6 +38,11 @@ export const POST = withApi<{ id: string }>(
       }
     }
 
+    const current = await getPostById(ctx.auth.db, id);
+    if (!current) {
+      throw ApiError.notFound('Post not found');
+    }
+
     await assertNoForeignLock(
       ctx.auth.db,
       id,
@@ -45,7 +50,12 @@ export const POST = withApi<{ id: string }>(
       ctx.auth.userId,
     );
 
-    const published = await publishPost(ctx.auth.db, id, at ? { at } : {});
+    // Bind the write to the revision the lock/authorization decision was made
+    // against, so a concurrent edit is a conflict rather than a silent overwrite.
+    const published = await publishPost(ctx.auth.db, id, {
+      ...(at ? { at } : {}),
+      ifUpdatedAt: current.updated_at,
+    });
     const post = await ensurePostCategory(ctx.auth.db, published);
     audit(ctx, 'post.publish', 'post', post.id);
 

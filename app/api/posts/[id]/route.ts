@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getAuthenticatedSupabaseClient } from '@/lib/supabase-server';
-import { createAdminClient } from '@/lib/supabase-admin';
 import { processAndUploadImages } from '@/lib/uploadImages';
 import { getUser } from '@/lib/auth';
 import { ApiError, toLegacyResponse } from '@/lib/cms/errors';
 import { isUuid } from '@/lib/cms/categoryService';
 import { assertNoForeignLock, getLock } from '@/lib/cms/lockService';
 import { deletePost, updatePost, type UpdatePostPatch } from '@/lib/cms/postService';
+import { parseStrictIsoTimestamp } from '@/lib/cms/timestamp';
+import {
+  WebResponseError,
+  requireAdminProfile,
+} from '@/lib/api/webLock';
 
 /** `force=1` via query string or a JSON body `{ force: true }`. */
 async function readForce(request: NextRequest): Promise<boolean> {
@@ -33,6 +37,11 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+
+    // A non-UUID id can't match any post; 404 without touching the database.
+    if (!isUuid(id)) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+    }
 
     // Check if user is authenticated
     const user = await getUser();
@@ -73,6 +82,16 @@ export async function PUT(
 
   try {
     const { id } = await params;
+
+    // A non-UUID id can't match any post; 404 without touching the database.
+    if (!isUuid(id)) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+    }
+
+    // Only a current master/admin profile may reach the privileged write path;
+    // the service-role client is built only after that check.
+    const { db: adminDb } = await requireAdminProfile(user);
+
     const body = await request.json();
     let { content_lexical } = body;
 
@@ -91,15 +110,16 @@ export async function PUT(
     const ifUpdatedAt =
       typeof body.if_updated_at === 'string' ? body.if_updated_at : undefined;
 
-    // A future published_at schedules the post; anything present must at least
-    // be a parseable date (the editor sends an ISO string or null).
-    if (body.published_at !== undefined && body.published_at !== null) {
-      if (
-        typeof body.published_at !== 'string' ||
-        Number.isNaN(Date.parse(body.published_at))
-      ) {
-        throw ApiError.validation('published_at must be a valid date');
-      }
+    // A future published_at schedules the post; anything present must be a
+    // strict ISO-8601 timestamp with an offset (the editor sends toISOString()).
+    if (
+      body.published_at !== undefined &&
+      body.published_at !== null &&
+      parseStrictIsoTimestamp(body.published_at) === null
+    ) {
+      throw ApiError.validation(
+        'published_at must be a valid ISO-8601 timestamp with an explicit offset or Z',
+      );
     }
 
     // Process blob images: upload to Supabase and replace with permanent URLs
@@ -132,9 +152,8 @@ export async function PUT(
     // has taken it over in the meantime. The lock table has no RLS policies, so
     // the service-role client is required to read it.
     if (lockSessionId !== undefined) {
-      const admin = createAdminClient();
       try {
-        await assertNoForeignLock(admin, id, lockSessionId, user.id);
+        await assertNoForeignLock(adminDb, id, lockSessionId, user.id);
       } catch (lockError) {
         if (lockError instanceof ApiError && lockError.code === 'locked') {
           const details = lockError.details as
@@ -182,6 +201,9 @@ export async function PUT(
       }
       return toLegacyResponse(error);
     }
+    if (error instanceof WebResponseError) {
+      return error.response;
+    }
     console.error('Failed to update post:', error);
     return NextResponse.json({ error: 'Failed to update post' }, { status: 500 });
   }
@@ -201,12 +223,19 @@ export async function DELETE(
   try {
     const { id } = await params;
 
+    // A non-UUID id can't match any post; 404 without touching the database.
+    if (!isUuid(id)) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+    }
+
     const force = await readForce(request);
+
+    // Only a current master/admin profile may reach the privileged delete path.
+    const { db: adminDb } = await requireAdminProfile(user);
 
     // Refuse to delete a post an agent is actively editing, unless forced. A
     // human's own lock does not block deletion (they are in the session).
-    const admin = createAdminClient();
-    const lock = await getLock(admin, id);
+    const lock = await getLock(adminDb, id);
     if (lock && lock.holder.kind === 'agent' && !force) {
       return NextResponse.json(
         {
@@ -227,6 +256,9 @@ export async function DELETE(
   } catch (error) {
     if (error instanceof ApiError) {
       return toLegacyResponse(error);
+    }
+    if (error instanceof WebResponseError) {
+      return error.response;
     }
     console.error('Failed to delete post:', error);
     return NextResponse.json({ error: 'Failed to delete post' }, { status: 500 });

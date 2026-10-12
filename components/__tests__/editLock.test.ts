@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   actionForLockResponse,
+  backoffDelay,
   editLockReducer,
   initialEditorLockState,
   lockAllowsSave,
@@ -105,6 +106,50 @@ describe('editLockReducer', () => {
       sessionId: 'session-1',
     });
     expect(editLockReducer(held, { type: 'released' })).toEqual(initialEditorLockState);
+  });
+
+  it('records a lock-endpoint failure as an error that still allows saving', () => {
+    const state = editLockReducer(initialEditorLockState, { type: 'error' });
+    expect(state).toMatchObject({
+      status: 'error',
+      locking: 'enabled',
+      sessionId: null,
+      holder: null,
+    });
+    expect(lockAllowsSave(state)).toBe(true);
+  });
+
+  it('drops out of a held state after a failure so Save becomes available', () => {
+    const held = editLockReducer(initialEditorLockState, {
+      type: 'acquired',
+      lock: USER_LOCK,
+      sessionId: 'session-1',
+    });
+    const errored = editLockReducer(held, { type: 'error' });
+    expect(errored.status).toBe('error');
+    expect(errored.sessionId).toBeNull();
+    expect(lockAllowsSave(errored)).toBe(true);
+  });
+
+  it('recovers from error when an acquire later succeeds', () => {
+    const errored = editLockReducer(initialEditorLockState, { type: 'error' });
+    const recovered = editLockReducer(errored, {
+      type: 'acquired',
+      lock: USER_LOCK,
+      sessionId: 'session-2',
+    });
+    expect(recovered.status).toBe('held');
+    expect(lockAllowsSave(recovered)).toBe(true);
+  });
+});
+
+describe('backoffDelay', () => {
+  it('doubles from 15s and caps at 60s', () => {
+    expect(backoffDelay(1)).toBe(15_000);
+    expect(backoffDelay(2)).toBe(30_000);
+    expect(backoffDelay(3)).toBe(60_000);
+    expect(backoffDelay(4)).toBe(60_000);
+    expect(backoffDelay(0)).toBe(15_000);
   });
 });
 

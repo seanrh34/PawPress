@@ -5,6 +5,7 @@ import { processAndUploadImages } from '@/lib/uploadImages';
 import { getUser } from '@/lib/auth';
 import { ApiError, toLegacyResponse } from '@/lib/cms/errors';
 import { createPost } from '@/lib/cms/postService';
+import { parseStrictIsoTimestamp } from '@/lib/cms/timestamp';
 
 // GET all posts
 export async function GET() {
@@ -54,15 +55,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     let { content_lexical } = body;
 
-    // A future published_at schedules the post; anything present must at least
-    // be a parseable date (the editor sends an ISO string or null).
-    if (body.published_at !== undefined && body.published_at !== null) {
-      if (
-        typeof body.published_at !== 'string' ||
-        Number.isNaN(Date.parse(body.published_at))
-      ) {
-        throw ApiError.validation('published_at must be a valid date');
-      }
+    // A future published_at schedules the post; anything present must be a
+    // strict ISO-8601 timestamp with an offset (the editor sends toISOString()).
+    if (
+      body.published_at !== undefined &&
+      body.published_at !== null &&
+      parseStrictIsoTimestamp(body.published_at) === null
+    ) {
+      throw ApiError.validation(
+        'published_at must be a valid ISO-8601 timestamp with an explicit offset or Z',
+      );
     }
 
     // Process base64 images: upload to Supabase and replace with permanent URLs

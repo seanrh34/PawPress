@@ -369,4 +369,129 @@ describe('posts get edit_lock', () => {
     expect(await h.run(['posts', 'get', 'hello'])).toBe(0);
     expect(h.stdoutText()).toContain(`edit_lock: agent ${AGENT_LABEL}`);
   });
+
+  it('strips control characters from a server holder label', async () => {
+    const harness = makeFetch(() =>
+      response(200, {
+        ...serverPost({ content: 'Body' }),
+        locking: 'enabled',
+        edit_lock: {
+          holder: { kind: 'agent', label: 'evil\u001b[31m (a@b.c)', user_id: 'user-1' },
+          acquired_at: UPDATED,
+          expires_at: EXPIRES,
+        },
+      }),
+    );
+    const h = makeHarness({ env: ENV, fetch: harness.fetch });
+    expect(await h.run(['posts', 'get', 'hello'])).toBe(0);
+    expect(h.stdoutText()).not.toContain('\u001b');
+    expect(h.stdoutText()).toContain('edit_lock: agent evil[31m (a@b.c)');
+  });
+});
+
+describe('posts pull without edit rights', () => {
+  it('notes a 403 and pulls without a lock', async () => {
+    const dir = await makeTempDir();
+    const target = join(dir, 'post.md');
+    const harness = makeFetch((url) =>
+      url.includes('/lock')
+        ? response(403, { error: { code: 'forbidden', message: 'Missing required scope: posts:publish' } })
+        : response(200, serverPost({ content: 'Body' })),
+    );
+    const h = makeHarness({ env: ENV, cwd: dir, fetch: harness.fetch });
+
+    expect(await h.run(['posts', 'pull', 'hello', '-o', target])).toBe(0);
+    expect(h.stderrText()).toContain("not locking: this token can't edit this post");
+    const parsed = parseFrontMatter(await readFile(target, 'utf8'));
+    expect(parsed.data.lock_session).toBeUndefined();
+  });
+
+  it('still fails a 403 from `posts lock`', async () => {
+    const harness = makeFetch(() =>
+      response(403, { error: { code: 'forbidden', message: 'Missing required scope: posts:publish' } }),
+    );
+    const h = makeHarness({ env: ENV, fetch: harness.fetch });
+    expect(await h.run(['posts', 'lock', POST_ID])).toBe(3);
+  });
+});
+
+describe('too_many_locks', () => {
+  const message =
+    'Too many active edit locks for this user (max 5); release some with `pawpress posts unlock`';
+
+  it('exits 5 with the server message on posts lock', async () => {
+    const harness = makeFetch(() =>
+      response(409, {
+        error: { code: 'conflict', message, details: { reason: 'too_many_locks', limit: 5 } },
+      }),
+    );
+    const h = makeHarness({ env: ENV, fetch: harness.fetch });
+    expect(await h.run(['posts', 'lock', POST_ID])).toBe(5);
+    expect(h.stderrText()).toContain(message);
+  });
+
+  it('exits 5 with the server message on posts pull', async () => {
+    const harness = makeFetch((url) =>
+      url.includes('/lock')
+        ? response(409, {
+            error: { code: 'conflict', message, details: { reason: 'too_many_locks', limit: 5 } },
+          })
+        : response(200, serverPost({ content: 'Body' })),
+    );
+    const h = makeHarness({ env: ENV, fetch: harness.fetch });
+    expect(await h.run(['posts', 'pull', 'hello'])).toBe(5);
+    expect(h.stderrText()).toContain(message);
+  });
+});
+
+describe('sending a lock session on mutations', () => {
+  it('posts update sends the --session header', async () => {
+    const harness = makeFetch(() => response(200, serverPost()));
+    const h = makeHarness({ env: ENV, fetch: harness.fetch });
+    expect(
+      await h.run(['posts', 'update', POST_ID, '--title', 'X', '--session', SESSION]),
+    ).toBe(0);
+    expect(headerOf(harness.calls[0]?.init, 'X-PawPress-Lock-Session')).toBe(SESSION);
+  });
+
+  it('posts update --file uses the file front matter lock_session', async () => {
+    const dir = await makeTempDir();
+    const file = await writeTempFile(
+      dir,
+      'post.md',
+      `---\nid: ${POST_ID}\nlock_session: ${SESSION2}\n---\nBody`,
+    );
+    const harness = makeFetch(() => response(200, serverPost()));
+    const h = makeHarness({ env: ENV, cwd: dir, fetch: harness.fetch });
+    expect(await h.run(['posts', 'update', POST_ID, '--file', file])).toBe(0);
+    expect(headerOf(harness.calls[0]?.init, 'X-PawPress-Lock-Session')).toBe(SESSION2);
+    // The front matter is stripped from the content sent.
+    expect(bodyOf(harness.calls[0]?.init).content_markdown).toBe('Body');
+  });
+
+  it('posts publish/unpublish/delete send the --session header', async () => {
+    const publish = makeFetch(() => response(200, serverPost()));
+    const publishHarness = makeHarness({ env: ENV, fetch: publish.fetch });
+    expect(await publishHarness.run(['posts', 'publish', POST_ID, '--session', SESSION])).toBe(0);
+    expect(headerOf(publish.calls[0]?.init, 'X-PawPress-Lock-Session')).toBe(SESSION);
+
+    const unpublish = makeFetch(() => response(200, serverPost()));
+    const unpublishHarness = makeHarness({ env: ENV, fetch: unpublish.fetch });
+    expect(await unpublishHarness.run(['posts', 'unpublish', POST_ID, '--session', SESSION])).toBe(0);
+    expect(headerOf(unpublish.calls[0]?.init, 'X-PawPress-Lock-Session')).toBe(SESSION);
+
+    const remove = makeFetch(() => response(200, { deleted: true, id: POST_ID }));
+    const deleteHarness = makeHarness({ env: ENV, fetch: remove.fetch });
+    expect(await deleteHarness.run(['posts', 'delete', POST_ID, '--yes', '--session', SESSION])).toBe(0);
+    expect(headerOf(remove.calls[0]?.init, 'X-PawPress-Lock-Session')).toBe(SESSION);
+  });
+
+  it('rejects a malformed --session without a request', async () => {
+    const harness = makeFetch(() => response(200, serverPost()));
+    const h = makeHarness({ env: ENV, fetch: harness.fetch });
+    expect(
+      await h.run(['posts', 'publish', POST_ID, '--session', 'not-a-uuid']),
+    ).toBe(2);
+    expect(harness.calls).toHaveLength(0);
+  });
 });

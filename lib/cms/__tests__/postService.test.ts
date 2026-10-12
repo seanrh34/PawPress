@@ -438,6 +438,41 @@ describe('publishPost', () => {
       code: 'not_found',
     });
   });
+
+  it('conflicts when the post changed between the check and the write', async () => {
+    const db = makeDb({
+      posts: [
+        { data: { ...post, updated_at: T1 } },
+        { data: null },
+        { data: { ...post, updated_at: T2 } },
+      ],
+    });
+
+    await expect(
+      publishPost(db.client, UUID, { ifUpdatedAt: T1 }),
+    ).rejects.toMatchObject({
+      code: 'conflict',
+      details: { current_updated_at: T2 },
+    });
+
+    expect(updateEqFilters(db)).toEqual([
+      ['id', UUID],
+      ['updated_at', T1],
+    ]);
+  });
+
+  it('returns not_found when the row disappears during a conditional write', async () => {
+    const db = makeDb({
+      posts: [
+        { data: { ...post, updated_at: T1 } },
+        { data: null },
+        { data: null },
+      ],
+    });
+    await expect(
+      publishPost(db.client, UUID, { ifUpdatedAt: T1 }),
+    ).rejects.toMatchObject({ code: 'not_found' });
+  });
 });
 
 describe('unpublishPost', () => {
@@ -451,6 +486,23 @@ describe('unpublishPost', () => {
 
     await unpublishPost(db.client, UUID);
     expect(updatePayload(db).published_at).toBeNull();
+  });
+
+  it('conflicts when the post changed between the check and the write', async () => {
+    const db = makeDb({
+      posts: [
+        { data: { ...post, updated_at: T1 } },
+        { data: null },
+        { data: { ...post, updated_at: T2 } },
+      ],
+    });
+
+    await expect(
+      unpublishPost(db.client, UUID, { ifUpdatedAt: T1 }),
+    ).rejects.toMatchObject({
+      code: 'conflict',
+      details: { current_updated_at: T2 },
+    });
   });
 });
 
@@ -466,6 +518,31 @@ describe('deletePost', () => {
     await expect(deletePost(db.client, UUID)).rejects.toMatchObject({
       code: 'not_found',
     });
+  });
+
+  it('conflicts when the post changed between the check and the delete', async () => {
+    const db = makeDb({
+      posts: [
+        { data: [] },
+        { data: { ...post, updated_at: T2 } },
+      ],
+    });
+
+    await expect(
+      deletePost(db.client, UUID, { ifUpdatedAt: T1 }),
+    ).rejects.toMatchObject({
+      code: 'conflict',
+      details: { current_updated_at: T2 },
+    });
+    const deleteEq = db.callsFor('posts', 'eq').map((call) => call.args);
+    expect(deleteEq).toContainEqual(['updated_at', T1]);
+  });
+
+  it('deletes conditionally when the revision matches', async () => {
+    const db = makeDb({ posts: [{ data: [post] }] });
+    await expect(
+      deletePost(db.client, UUID, { ifUpdatedAt: T1 }),
+    ).resolves.toBeUndefined();
   });
 });
 

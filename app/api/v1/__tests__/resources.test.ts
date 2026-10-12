@@ -258,7 +258,8 @@ const routeCases: RouteCase[] = [
     makeRequest: (token) => authed(`${BASE}/posts/${UUID}`, 'DELETE', token),
     invoke: (req) => postDelete(req, ctxFor(UUID)),
     setup: () => {
-      db.enqueue('posts', { data: postRow() }, { data: null });
+      // route read, then the conditional delete returning the deleted row.
+      db.enqueue('posts', { data: postRow() }, { data: [postRow()] });
     },
   },
   {
@@ -270,8 +271,10 @@ const routeCases: RouteCase[] = [
       authed(`${BASE}/posts/${UUID}/publish`, 'POST', token),
     invoke: (req) => publishPostRoute(req, ctxFor(UUID)),
     setup: () => {
+      // route read, then publish service read/update/ensure re-read.
       db.enqueue(
         'posts',
+        { data: postRow() },
         { data: postRow() },
         { data: barePostRow({ published_at: T1 }) },
         { data: postRow({ published_at: T1 }) },
@@ -287,8 +290,10 @@ const routeCases: RouteCase[] = [
       authed(`${BASE}/posts/${UUID}/unpublish`, 'POST', token),
     invoke: (req) => unpublishPostRoute(req, ctxFor(UUID)),
     setup: () => {
+      // route read, then unpublish service read/update/ensure re-read.
       db.enqueue(
         'posts',
+        { data: postRow({ published_at: T1 }) },
         { data: postRow({ published_at: T1 }) },
         { data: barePostRow({ published_at: null }) },
         { data: postRow({ published_at: null }) },
