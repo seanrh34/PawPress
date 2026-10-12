@@ -2,14 +2,14 @@ import { writeFile } from 'node:fs/promises';
 import { optBool, optString, parseOptions } from '../args';
 import type { OptionSpec } from '../args';
 import { CliError, EXIT, usageError } from '../errors';
-import { assertUuid } from '../ids';
+import { assertUuid, isUuid } from '../ids';
 import { parseFrontMatter, serializeFrontMatter } from '../frontmatter';
 import { assertLocalImagesExist, scanLocalImages, uniqueByAbsolutePath } from '../images';
 import { makeClient } from '../runtime';
 import { truncate } from '../output';
 import type { Context } from '../runtime';
 import type { ApiClient } from '../http';
-import type { ContentFormat, DeletedResponse, Post, PostList } from '../types';
+import type { ContentFormat, DeletedResponse, LockResponse, LockReleaseResponse, Post, PostList } from '../types';
 import {
   applyUploads,
   baseDirForFile,
@@ -23,6 +23,107 @@ import type { PlanUpload } from './shared';
 
 const FORMATS: ContentFormat[] = ['markdown', 'lexical', 'html'];
 const STATUSES = ['draft', 'scheduled', 'published', 'all'];
+const DEFAULT_LOCK_TTL_SECONDS = 900;
+const MIN_LOCK_TTL_SECONDS = 60;
+const MAX_LOCK_TTL_SECONDS = 3600;
+const LOCK_SESSION_HEADER = 'X-PawPress-Lock-Session';
+
+function isLockedError(error: unknown): error is CliError {
+  return error instanceof CliError && error.code === 'locked';
+}
+
+function takenOver(details: unknown): boolean {
+  return (
+    typeof details === 'object' &&
+    details !== null &&
+    (details as { taken_over?: unknown }).taken_over === true
+  );
+}
+
+/**
+ * Re-throws a 409 `locked` as `<verb> refused: <message>`, preserving the
+ * machine-readable code and the holder details. Other errors pass through.
+ */
+function reframeLocked(error: unknown, verb: string): never {
+  if (isLockedError(error)) {
+    throw new CliError(`${verb} refused: ${error.message}`, EXIT.CONFLICT, {
+      code: 'locked',
+      details: error.details,
+    });
+  }
+  throw error;
+}
+
+/** Resolves a slug to a post id (a UUID is used as-is). */
+async function resolvePostId(client: ApiClient, ref: string): Promise<string> {
+  if (isUuid(ref)) {
+    return ref;
+  }
+  const post = await client.request<Post>({
+    method: 'GET',
+    path: `/api/v1/posts/${encodeURIComponent(ref)}`,
+    query: { format: 'markdown' },
+  });
+  return post.id;
+}
+
+interface LockContext {
+  session: string;
+  expiresAt: string | null;
+}
+
+/**
+ * Acquires (or renews with `session`) an agent edit lock. Throws exit-5 for a
+ * foreign lock, and returns `null` when locking is unavailable.
+ */
+async function acquireAgentLock(
+  client: ApiClient,
+  id: string,
+  options: { session?: string; ttlSeconds: number; verb: string },
+): Promise<LockContext | null> {
+  let response: LockResponse;
+  try {
+    response = await client.request<LockResponse>({
+      method: 'POST',
+      path: `/api/v1/posts/${encodeURIComponent(id)}/lock`,
+      json: {
+        ttl_seconds: options.ttlSeconds,
+        ...(options.session === undefined ? {} : { session_id: options.session }),
+      },
+    });
+  } catch (error) {
+    if (isLockedError(error)) {
+      throw new CliError(`not editing: ${error.message}`, EXIT.CONFLICT, {
+        code: 'locked',
+        details: error.details,
+      });
+    }
+    throw error;
+  }
+
+  if (response.locking !== 'enabled' || !response.lock?.session_id) {
+    // Missing mode (older server) or unavailable migration: no lock to hold.
+    return null;
+  }
+  return { session: response.lock.session_id, expiresAt: response.lock.expires_at };
+}
+
+/** Best-effort release of our own lock; failures are ignored. */
+async function releaseAgentLock(
+  client: ApiClient,
+  id: string,
+  session: string,
+): Promise<void> {
+  try {
+    await client.request<LockReleaseResponse>({
+      method: 'DELETE',
+      path: `/api/v1/posts/${encodeURIComponent(id)}/lock`,
+      headers: { [LOCK_SESSION_HEADER]: session },
+    });
+  } catch {
+    // Releasing is best-effort; the lease expires on its own.
+  }
+}
 
 const ISO_OFFSET_PATTERN =
   /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})$/;
@@ -70,6 +171,10 @@ export async function postsCommand(ctx: Context, args: string[]): Promise<void> 
       return postsSetStatus(ctx, rest, 'unpublish');
     case 'delete':
       return postsDelete(ctx, rest);
+    case 'lock':
+      return postsLock(ctx, rest);
+    case 'unlock':
+      return postsUnlock(ctx, rest);
     case undefined:
       throw usageError('posts requires a subcommand');
     default:
@@ -169,11 +274,16 @@ async function postsPull(ctx: Context, args: string[]): Promise<void> {
   const { out } = ctx;
   const { values, positionals } = parseOptions(
     args,
-    { output: { type: 'string', short: 'o' } },
+    {
+      output: { type: 'string', short: 'o' },
+      'lock-ttl': { type: 'string' },
+      'no-lock': { type: 'boolean' },
+    },
     true,
   );
   const ref = singleRef(positionals, 'posts pull');
   const outputPath = optString(values, 'output');
+  const noLock = optBool(values, 'no-lock');
 
   const client = await makeClient(ctx);
   const post = await client.request<Post>({
@@ -182,13 +292,43 @@ async function postsPull(ctx: Context, args: string[]): Promise<void> {
     query: { format: 'markdown' },
   });
   const body = typeof post.content === 'string' ? post.content : '';
-  const text = serializeFrontMatter(frontMatterFor(post), body);
+
+  // Acquiring a lock is the default; --no-lock opts out.
+  let lock: LockContext | null = null;
+  if (!noLock) {
+    const ttl = intOption(values, 'lock-ttl', {
+      min: MIN_LOCK_TTL_SECONDS,
+      max: MAX_LOCK_TTL_SECONDS,
+    });
+    lock = await acquireAgentLock(client, post.id, {
+      ttlSeconds: ttl ?? DEFAULT_LOCK_TTL_SECONDS,
+      verb: 'pull',
+    });
+    if (!lock) {
+      out.note(
+        'edit locking unavailable on this site; relying on updated_at conflict detection',
+      );
+    }
+  }
+
+  const data = frontMatterFor(post);
+  if (lock) {
+    data.lock_session = lock.session;
+    if (lock.expiresAt) data.lock_expires_at = lock.expiresAt;
+  }
+  const text = serializeFrontMatter(data, body);
 
   if (outputPath) {
     await writeFile(outputPath, text, 'utf8');
     out.note(`Wrote ${outputPath}`);
     if (out.json) {
-      out.jsonDoc({ file: outputPath, id: post.id, updated_at: post.updated_at });
+      out.jsonDoc({
+        file: outputPath,
+        id: post.id,
+        updated_at: post.updated_at,
+        lock_session: lock?.session ?? null,
+        lock_expires_at: lock?.expiresAt ?? null,
+      });
     }
     return;
   }
@@ -205,6 +345,7 @@ async function postsPush(ctx: Context, args: string[]): Promise<void> {
       'dry-run': { type: 'boolean' },
       force: { type: 'boolean' },
       'write-back': { type: 'boolean' },
+      'keep-lock': { type: 'boolean' },
       'allow-outside-dir': { type: 'boolean' },
     },
     true,
@@ -219,6 +360,7 @@ async function postsPush(ctx: Context, args: string[]): Promise<void> {
   const dryRun = optBool(values, 'dry-run');
   const force = optBool(values, 'force');
   const writeBack = optBool(values, 'write-back');
+  const keepLock = optBool(values, 'keep-lock');
   const allowOutsideDir = optBool(values, 'allow-outside-dir');
 
   const text = await readContentFile(file);
@@ -260,7 +402,72 @@ async function postsPush(ctx: Context, args: string[]): Promise<void> {
   }
 
   const client = await makeClient(ctx);
-  const post = await sendPost(client, isUpdate ? 'PATCH' : 'POST', path, body, isUpdate, updateId);
+
+  // If the front matter carries a lock session, renew it when the lease has
+  // expired, then send the session header so the server knows this is "us".
+  let lockSession = isUpdate ? fields.lockSession : undefined;
+  let lockExpiresAt = fields.lockExpiresAt ?? null;
+  if (isUpdate && updateId && lockSession) {
+    const expiresMs = lockExpiresAt ? Date.parse(lockExpiresAt) : NaN;
+    const expired = !Number.isFinite(expiresMs) || expiresMs <= Date.now();
+    if (expired) {
+      try {
+        const renewed = await acquireAgentLock(client, updateId, {
+          session: lockSession,
+          ttlSeconds: DEFAULT_LOCK_TTL_SECONDS,
+          verb: 'push',
+        });
+        if (renewed) {
+          lockSession = renewed.session;
+          lockExpiresAt = renewed.expiresAt;
+        } else {
+          out.note(
+            'edit locking unavailable on this site; relying on updated_at conflict detection',
+          );
+          lockSession = undefined;
+        }
+      } catch (error) {
+        if (isLockedError(error)) {
+          throw new CliError(`failed to apply edits: ${error.message}`, EXIT.CONFLICT, {
+            code: 'locked',
+            details: error.details,
+          });
+        }
+        throw error;
+      }
+    }
+  }
+
+  let post: Post;
+  try {
+    post = await sendPost(
+      client,
+      isUpdate ? 'PATCH' : 'POST',
+      path,
+      body,
+      isUpdate,
+      updateId,
+      lockSession,
+    );
+  } catch (error) {
+    if (isLockedError(error)) {
+      const reason = takenOver(error.details)
+        ? 'an admin took over editing'
+        : error.message;
+      throw new CliError(
+        `failed to apply edits: ${reason}; your changes are still in ${file}`,
+        EXIT.CONFLICT,
+        { code: 'locked', details: error.details },
+      );
+    }
+    throw error;
+  }
+
+  // A successful update releases our lock unless the caller wants to keep it.
+  if (isUpdate && updateId && lockSession && !keepLock) {
+    await releaseAgentLock(client, updateId, lockSession);
+    lockSession = undefined;
+  }
 
   if (writeBack) {
     const nextData: Record<string, unknown> = { ...doc.data };
@@ -275,6 +482,13 @@ async function postsPush(ctx: Context, args: string[]): Promise<void> {
       nextData.publish_at = post.published_at;
     } else {
       delete nextData.publish_at;
+    }
+    if (keepLock && lockSession) {
+      nextData.lock_session = lockSession;
+      if (lockExpiresAt) nextData.lock_expires_at = lockExpiresAt;
+    } else {
+      delete nextData.lock_session;
+      delete nextData.lock_expires_at;
     }
     nextData.updated_at = post.updated_at;
     await writeFile(file, serializeFrontMatter(nextData, prepared.markdown), 'utf8');
@@ -430,9 +644,99 @@ async function postsUpdate(ctx: Context, args: string[]): Promise<void> {
   }
 
   const client = await makeClient(ctx);
-  const post = await sendPost(client, 'PATCH', path, body, true, id);
+  let post: Post;
+  try {
+    post = await sendPost(client, 'PATCH', path, body, true, id);
+  } catch (error) {
+    reframeLocked(error, 'post update');
+  }
   if (out.json) out.jsonDoc(post);
   else printPostSummary(out, post);
+}
+
+async function postsLock(ctx: Context, args: string[]): Promise<void> {
+  const { out } = ctx;
+  const { values, positionals } = parseOptions(
+    args,
+    { ttl: { type: 'string' }, session: { type: 'string' } },
+    true,
+  );
+  const ref = singleRef(positionals, 'posts lock');
+  const ttl = intOption(values, 'ttl', {
+    min: MIN_LOCK_TTL_SECONDS,
+    max: MAX_LOCK_TTL_SECONDS,
+  });
+  const session = optString(values, 'session');
+  if (session !== undefined) assertUuid(session, 'lock session');
+
+  const client = await makeClient(ctx);
+  const id = await resolvePostId(client, ref);
+
+  let response: LockResponse;
+  try {
+    response = await client.request<LockResponse>({
+      method: 'POST',
+      path: `/api/v1/posts/${encodeURIComponent(id)}/lock`,
+      json: {
+        ttl_seconds: ttl ?? DEFAULT_LOCK_TTL_SECONDS,
+        ...(session === undefined ? {} : { session_id: session }),
+      },
+    });
+  } catch (error) {
+    if (isLockedError(error)) {
+      throw new CliError(`not editing: ${error.message}`, EXIT.CONFLICT, {
+        code: 'locked',
+        details: error.details,
+      });
+    }
+    throw error;
+  }
+
+  if (response.locking === 'unavailable') {
+    out.note(
+      'edit locking unavailable on this site; relying on updated_at conflict detection',
+    );
+    return;
+  }
+
+  if (out.json) {
+    out.jsonDoc(response.lock);
+    return;
+  }
+  out.line(`post: ${id}`);
+  out.line(`session: ${response.lock?.session_id ?? ''}`);
+  out.line(`expires_at: ${response.lock?.expires_at ?? ''}`);
+}
+
+async function postsUnlock(ctx: Context, args: string[]): Promise<void> {
+  const { out } = ctx;
+  const { values, positionals } = parseOptions(
+    args,
+    { session: { type: 'string' } },
+    true,
+  );
+  const id = assertUuid(singleRef(positionals, 'posts unlock'), 'post id');
+  const session = optString(values, 'session');
+  if (session === undefined) {
+    throw usageError('posts unlock requires --session <uuid>');
+  }
+  assertUuid(session, 'lock session');
+
+  const client = await makeClient(ctx);
+  const result = await client.request<LockReleaseResponse>({
+    method: 'DELETE',
+    path: `/api/v1/posts/${encodeURIComponent(id)}/lock`,
+    headers: { [LOCK_SESSION_HEADER]: session },
+  });
+  if (out.json) {
+    out.jsonDoc(result);
+    return;
+  }
+  out.line(
+    result.released
+      ? `Released lock for post ${id}`
+      : `No lock to release for post ${id}`,
+  );
 }
 
 async function postsSetStatus(
@@ -448,11 +752,16 @@ async function postsSetStatus(
   if (at !== undefined) assertFutureIso(at, '--at');
 
   const client = await makeClient(ctx);
-  const post = await client.request<Post>({
-    method: 'POST',
-    path: `/api/v1/posts/${encodeURIComponent(id)}/${action}`,
-    ...(at === undefined ? {} : { json: { at } }),
-  });
+  let post: Post;
+  try {
+    post = await client.request<Post>({
+      method: 'POST',
+      path: `/api/v1/posts/${encodeURIComponent(id)}/${action}`,
+      ...(at === undefined ? {} : { json: { at } }),
+    });
+  } catch (error) {
+    reframeLocked(error, `post ${action}`);
+  }
   if (out.json) out.jsonDoc(post);
   else printPostSummary(out, post);
 }
@@ -475,7 +784,12 @@ async function postsDelete(ctx: Context, args: string[]): Promise<void> {
     return;
   }
   const client = await makeClient(ctx);
-  const result = await client.request<DeletedResponse>({ method: 'DELETE', path });
+  let result: DeletedResponse;
+  try {
+    result = await client.request<DeletedResponse>({ method: 'DELETE', path });
+  } catch (error) {
+    reframeLocked(error, 'post delete');
+  }
   if (out.json) out.jsonDoc(result);
   else out.line(`Deleted post ${result.id}`);
 }
@@ -520,6 +834,8 @@ interface FrontMatterFields {
   status?: 'draft' | 'scheduled' | 'published';
   publishAt?: string;
   updatedAt?: string;
+  lockSession?: string;
+  lockExpiresAt?: string;
 }
 
 function readFields(data: Record<string, unknown>): FrontMatterFields {
@@ -532,6 +848,8 @@ function readFields(data: Record<string, unknown>): FrontMatterFields {
     excerpt: optionalString(data, 'excerpt'),
     category: optionalString(data, 'category'),
     updatedAt: optionalString(data, 'updated_at'),
+    lockSession: optionalString(data, 'lock_session'),
+    lockExpiresAt: optionalString(data, 'lock_expires_at'),
   };
   const featured = data.featured_image;
   if (featured !== undefined && featured !== null) {
@@ -632,11 +950,21 @@ async function sendPost(
   body: Record<string, unknown>,
   isUpdate: boolean,
   id: string | undefined,
+  lockSession?: string,
 ): Promise<Post> {
   try {
-    return await client.request<Post>({ method, path, json: body });
+    return await client.request<Post>({
+      method,
+      path,
+      json: body,
+      ...(lockSession === undefined
+        ? {}
+        : { headers: { [LOCK_SESSION_HEADER]: lockSession } }),
+    });
   } catch (error) {
-    if (error instanceof CliError && error.exitCode === EXIT.CONFLICT) {
+    // A foreign/lost edit lock is reported verbatim so the caller can name who
+    // is editing; only genuine `conflict` (stale updated_at) gets the hint.
+    if (error instanceof CliError && error.code === 'conflict') {
       const hint = isUpdate
         ? `the post changed on the server; run \`pawpress posts pull ${id ?? ''}\` and merge, or retry with --force`
         : 'that slug is already taken; choose a different --slug';
