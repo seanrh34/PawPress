@@ -7,7 +7,7 @@ import Editor from '@/components/Editor';
 import FeaturedImageUpload from '@/components/FeaturedImageUpload';
 import { SerializedEditorState } from 'lexical';
 import { Post, Category } from '@/lib/types';
-import { supabase } from '@/lib/supabase';
+import { uploadImageViaServer } from '@/lib/clientUploads';
 
 interface PostEditorProps {
   post?: Post;
@@ -69,72 +69,18 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
   };
 
   const uploadFeaturedImage = async (): Promise<string> => {
-    // If it's a file, upload to Supabase
+    // If it's a file, upload via the server
     if (featuredImageFile) {
-      try {
-        const timestamp = Date.now();
-        const randomStr = Math.random().toString(36).substring(2, 15);
-        const extension = featuredImageFile.name.split('.').pop() || 'jpg';
-        const fileName = `featured-${timestamp}-${randomStr}.${extension}`;
-
-        const { data, error } = await supabase.storage
-          .from('post-images')
-          .upload(fileName, featuredImageFile, {
-            contentType: featuredImageFile.type,
-            cacheControl: '3600',
-            upsert: false
-          });
-
-        if (error) throw error;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('post-images')
-          .getPublicUrl(data.path);
-
-        return publicUrl;
-      } catch (error) {
-        console.error('Failed to upload featured image:', error);
-        throw new Error('Failed to upload featured image');
-      }
+      return uploadImageViaServer(featuredImageFile, featuredImageFile.name);
     }
 
-    // If it's an external URL, download and upload to Supabase
+    // If it's an external URL, download and upload via the server
     if (isExternalUrl && featuredImageUrl) {
-      try {
-        // Download the image
-        const response = await fetch(featuredImageUrl);
-        if (!response.ok) throw new Error('Failed to download image');
-        
-        const blob = await response.blob();
-        
-        // Determine file extension from content type or URL
-        const contentType = response.headers.get('content-type') || 'image/jpeg';
-        let extension = contentType.split('/')[1]?.split(';')[0] || 'jpg';
-        if (extension === 'jpeg') extension = 'jpg';
-        
-        const timestamp = Date.now();
-        const randomStr = Math.random().toString(36).substring(2, 15);
-        const fileName = `featured-${timestamp}-${randomStr}.${extension}`;
+      const response = await fetch(featuredImageUrl);
+      if (!response.ok) throw new Error('Failed to download image');
 
-        const { data, error } = await supabase.storage
-          .from('post-images')
-          .upload(fileName, blob, {
-            contentType: contentType,
-            cacheControl: '3600',
-            upsert: false
-          });
-
-        if (error) throw error;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('post-images')
-          .getPublicUrl(data.path);
-
-        return publicUrl;
-      } catch (error) {
-        console.error('Failed to download and upload featured image:', error);
-        throw new Error('Failed to download and upload featured image');
-      }
+      const blob = await response.blob();
+      return uploadImageViaServer(blob, 'featured-image');
     }
 
     // If it's already a Supabase URL, return as-is
@@ -145,15 +91,9 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
     if (!oldUrl) return;
 
     try {
-      // Extract filename from URL
-      const urlParts = oldUrl.split('/');
-      const fileName = urlParts[urlParts.length - 1];
-
       // Only delete if it's from our storage (contains 'post-images')
       if (oldUrl.includes('post-images')) {
-        await supabase.storage
-          .from('post-images')
-          .remove([fileName]);
+        await fetch(`/api/uploads?url=${encodeURIComponent(oldUrl)}`, { method: 'DELETE' });
       }
     } catch (error) {
       console.error('Failed to delete old featured image:', error);
