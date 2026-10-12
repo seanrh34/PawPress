@@ -5,18 +5,17 @@ policy edits, or Auth settings). This is the checklist of database-side work for
 rough priority order. Items marked **security** are worth doing before giving tokens to agents on a
 public site.
 
-> **Live state of the `34cats-blog` project (checked 2026-10-12):**
-> - `posts`: writes and the authenticated read are already admin-only (`user_profiles.role in
->   ('admin','master')`). The public read policy was updated by (i).
-> - `categories`: insert/update/delete are allowed for **any authenticated user** (`true`).
-> - `storage.objects`: **"Allow public uploads"**, an INSERT policy for the `public` role on bucket
->   `post-images`. Anyone with the anon key (it's in the site's JavaScript) can upload arbitrary files
->   without logging in. See (c): the web editor currently relies on this, because it uploads with the
->   anon client.
-> - Migrations (i) are **applied** on this project (2026-10-12).
+> **Live state of the `34cats-blog` project (updated 2026-10-12):**
+> - `posts`: writes and the authenticated read are admin-only; public reads only see posts whose
+>   `published_at` has passed (migration 20261012000100).
+> - `categories`: writes are admin-only (migration 20261012000200, **applied**). Public reads unchanged.
+> - `storage.objects`: the anonymous "Allow public uploads" policy was **dropped** (migration
+>   20261012000300, applied after PR #4 moved every upload server-side). Only "Allow public reads"
+>   remains; the server uploads with the service-role key after an admin check.
+> - Edit locks: migration 20261012000000 **applied**.
 >
-> The rest of (a)/(b) below was written from the README's setup SQL, which is more permissive than
-> the live `posts` policies.
+> Items (a)-(c) below were written from the README's setup SQL. On this project, (b) and (c) are done;
+> (a) (disabling public sign-ups) is still recommended as defence in depth.
 
 ## (a) Disable public sign-ups, or make RLS role-aware — security
 
