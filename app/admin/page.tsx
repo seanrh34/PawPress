@@ -8,12 +8,27 @@ import { useRouter } from 'next/navigation';
 
 export default function AdminDashboard() {
   const [posts, setPosts] = useState<Post[]>([]);
+  const [locks, setLocks] = useState<Record<string, { kind: 'user' | 'agent'; label: string }>>({});
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
     fetchPosts();
   }, []);
+
+  const fetchLocks = async () => {
+    try {
+      const response = await fetch('/api/posts/locks');
+      if (!response.ok) return;
+      const data = await response.json();
+      // Skipped entirely when the post_edit_locks migration isn't applied.
+      if (data.locking === 'enabled') {
+        setLocks(data.locks ?? {});
+      }
+    } catch (err) {
+      console.error('Error fetching edit locks:', err);
+    }
+  };
 
   const fetchPosts = async () => {
     try {
@@ -42,6 +57,7 @@ export default function AdminDashboard() {
       );
       
       setPosts(postsWithCategories);
+      void fetchLocks();
     } catch (error) {
       console.error('Error fetching posts:', error);
     } finally {
@@ -204,6 +220,19 @@ export default function AdminDashboard() {
                         <div>
                           <div className="font-medium text-gray-900">{post.title}</div>
                           <div className="text-sm text-gray-500">/{post.slug}</div>
+                          {locks[post.id] && (
+                            <div
+                              className={`text-xs mt-1 ${
+                                locks[post.id].kind === 'agent'
+                                  ? 'text-purple-700'
+                                  : 'text-amber-700'
+                              }`}
+                            >
+                              {locks[post.id].kind === 'agent'
+                                ? `🤖 being edited by ${locks[post.id].label}`
+                                : `✏️ being edited by ${locks[post.id].label}`}
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-4">
