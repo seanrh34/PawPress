@@ -10,6 +10,9 @@ import {
   type CategoryRow,
 } from './categoryService';
 import { slugify, validateSlug } from './slug';
+import type { PostStatus } from './status';
+
+export type { PostStatus };
 
 export interface PostCategory {
   id: string;
@@ -32,14 +35,17 @@ export interface PostRow {
   category?: PostCategory | null;
 }
 
-export type PostStatus = 'draft' | 'published';
-
 export interface ListPostsOptions {
   status?: PostStatus | 'all';
   categorySlug?: string;
   q?: string;
   limit?: number;
   offset?: number;
+  /**
+   * ISO timestamp used to classify scheduled vs published. Callers that need
+   * deterministic tests pass it explicitly; it defaults to the current time.
+   */
+  now?: string;
 }
 
 export interface ListPostsResult {
@@ -140,6 +146,7 @@ export async function listPosts(
     q,
     limit = 20,
     offset = 0,
+    now = new Date().toISOString(),
   } = options;
 
   let category: CategoryRow | null = null;
@@ -155,7 +162,11 @@ export async function listPosts(
     .select('*, category:categories(id, slug, name)', { count: 'exact' });
 
   if (status === 'published') {
-    query = query.not('published_at', 'is', null);
+    query = query
+      .not('published_at', 'is', null)
+      .lte('published_at', now);
+  } else if (status === 'scheduled') {
+    query = query.not('published_at', 'is', null).gt('published_at', now);
   } else if (status === 'draft') {
     query = query.is('published_at', null);
   }
@@ -405,19 +416,40 @@ export async function updatePost(
   return data as PostRow;
 }
 
+export interface PublishPostOptions {
+  /** When given, schedule the post for this instant instead of publishing now. */
+  at?: Date;
+}
+
 export async function publishPost(
   db: SupabaseClient,
   id: string,
+  options: PublishPostOptions = {},
 ): Promise<PostRow> {
   const current = await getPostById(db, id);
   if (!current) {
     throw ApiError.notFound('Post not found');
   }
 
+  const now = new Date();
+  let published_at: string;
+  if (options.at) {
+    published_at = options.at.toISOString();
+  } else if (
+    current.published_at === null ||
+    Date.parse(current.published_at) > now.getTime()
+  ) {
+    // A draft or a scheduled post goes live now; an already published post
+    // keeps its original timestamp (idempotent).
+    published_at = now.toISOString();
+  } else {
+    published_at = current.published_at;
+  }
+
   const { data, error } = await db
     .from('posts')
     .update({
-      published_at: current.published_at ?? new Date().toISOString(),
+      published_at,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)

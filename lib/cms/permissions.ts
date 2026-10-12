@@ -1,4 +1,7 @@
 import { ApiError } from './errors';
+import { postStatus, type PostStatus } from './status';
+
+export type { PostStatus };
 
 export type Scope =
   | 'posts:read'
@@ -67,20 +70,15 @@ export interface PostStatusSnapshot {
   published_at: string | null;
 }
 
-export type PostStatus = 'draft' | 'published';
-
-function statusOf(current: PostStatusSnapshot): PostStatus {
-  return current.published_at !== null ? 'published' : 'draft';
-}
-
 /**
  * Scopes needed to update a post: always `posts:write`; `posts:publish` is also
- * required when the post is currently published or when the update changes its
- * status.
+ * required when the post is currently published or scheduled (i.e.
+ * `published_at` is non-null), when the update changes its status, or when it
+ * sends `publish_at`. A scheduled post counts as published for permissions.
  */
 export function requiredScopesForPostUpdate(
   current: PostStatusSnapshot,
-  patch: { status?: PostStatus },
+  patch: { status?: PostStatus; hasPublishAt?: boolean },
 ): Scope[] {
   const scopes = new Set<Scope>(['posts:write']);
 
@@ -88,7 +86,11 @@ export function requiredScopesForPostUpdate(
     scopes.add('posts:publish');
   }
 
-  if (patch.status !== undefined && patch.status !== statusOf(current)) {
+  if (patch.status !== undefined && patch.status !== postStatus(current.published_at)) {
+    scopes.add('posts:publish');
+  }
+
+  if (patch.hasPublishAt) {
     scopes.add('posts:publish');
   }
 
@@ -97,12 +99,12 @@ export function requiredScopesForPostUpdate(
 
 /**
  * Scopes needed to create a post: `posts:write`, plus `posts:publish` when it
- * is created directly as published.
+ * is created as published or scheduled.
  */
 export function requiredScopesForPostCreate(input: { status?: PostStatus }): Scope[] {
   const scopes: Scope[] = ['posts:write'];
 
-  if (input.status === 'published') {
+  if (input.status === 'published' || input.status === 'scheduled') {
     scopes.push('posts:publish');
   }
 
