@@ -1,5 +1,10 @@
-import { supabase } from './supabase';
+import { createAdminClient } from './supabase-admin';
 import { SerializedEditorState } from 'lexical';
+
+// SERVER-ONLY: this module uses the Supabase service-role client, which bypasses
+// RLS. It must only be imported from server-side code (route handlers / server
+// components) after the caller has performed its auth check. NEVER import this
+// module from a 'use client' component.
 
 /**
  * Upload a base64 image to Supabase Storage
@@ -8,6 +13,7 @@ import { SerializedEditorState } from 'lexical';
  * @returns The public URL from Supabase Storage
  */
 async function uploadBase64ToSupabase(base64Data: string, contentType: string): Promise<string> {
+  const supabase = createAdminClient();
   try {
     // Convert base64 to buffer
     const base64WithoutPrefix = base64Data.split(',')[1] || base64Data;
@@ -50,6 +56,7 @@ async function uploadBase64ToSupabase(base64Data: string, contentType: string): 
  * @returns The public URL from Supabase Storage
  */
 async function downloadAndUploadToSupabase(imageUrl: string): Promise<string> {
+  const supabase = createAdminClient();
   try {
     // Fetch the image from the external URL
     const response = await fetch(imageUrl);
