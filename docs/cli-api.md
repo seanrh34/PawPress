@@ -32,8 +32,8 @@ failed.
 | Scope | Grants |
 |---|---|
 | `posts:read` | list/get posts, including drafts |
-| `posts:write` | create posts as drafts; edit posts that are **not** published |
-| `posts:publish` | publish/unpublish; edit already-published posts; create with `status: "published"` |
+| `posts:write` | create posts as drafts; edit drafts (posts that are neither published nor scheduled) |
+| `posts:publish` | publish now, schedule, unpublish/unschedule; edit published **or scheduled** posts; create as published or scheduled |
 | `posts:delete` | delete posts |
 | `categories:write` | create/update/delete categories (reading categories needs only a valid token) |
 | `media:upload` | upload images |
@@ -61,6 +61,7 @@ Every non-2xx response has this body:
 | `forbidden` | 403 | authenticated but missing a scope (or Origin check failed) | 3 |
 | `not_found` | 404 | resource doesn't exist | 4 |
 | `conflict` | 409 | slug already taken, `if_updated_at` mismatch, category still has posts | 5 |
+| `locked` | 409 | another editor (a human admin or another agent) holds the post's edit lock; `details.holder` says who (§9) | 5 |
 | `validation_failed` | 400 | bad input, including invalid JSON | 6 |
 | `payload_too_large` | 413 | upload over the size limit | 6 |
 | `unsupported_media_type` | 415 | upload MIME type not allowed | 6 |
@@ -89,7 +90,8 @@ CLI exit codes: `0` ok, `1` unexpected/internal, `2` usage error (bad CLI args, 
 }
 ```
 
-- `status` is derived, not stored: `"published"` iff `published_at` is non-null, otherwise `"draft"`.
+- `status` is derived from `published_at`, not stored: `"draft"` if null, `"scheduled"` if in the
+  future, `"published"` otherwise (see §8).
 - `category` is `null` if the post's category no longer exists.
 - `content` is present **only** on `GET /posts/:idOrSlug`, in the requested `format`:
   `markdown` (string), `lexical` (the serialized editor state object), or `html` (the stored
@@ -123,7 +125,7 @@ Any valid token. `200`:
 
 ### `GET /api/v1/posts`
 Scope `posts:read`. Query params:
-- `status`: `draft` | `published` | `all` (default `all`)
+- `status`: `draft` | `scheduled` | `published` | `all` (default `all`)
 - `category`: category slug
 - `q`: case-insensitive substring match on title
 - `limit`: 1–100 (default 20); `offset`: ≥ 0 (default 0)
@@ -136,7 +138,7 @@ Scope `posts:read`. If `:idOrSlug` is a UUID, the lookup is by id; otherwise by 
 is `markdown`. `200`: Post with `content` and `content_format`. `404 not_found` if missing.
 
 ### `POST /api/v1/posts`
-Scope `posts:write`; additionally `posts:publish` if `status` is `"published"`.
+Scope `posts:write`; additionally `posts:publish` if `status` is `"published"` or `"scheduled"`.
 
 Body:
 | Field | Type | Notes |
@@ -148,30 +150,39 @@ Body:
 | `featured_image_url` | string \| null | optional; `http(s)` URL or site-relative path |
 | `content_markdown` | string | exactly one of `content_markdown` / `content_lexical` is required |
 | `content_lexical` | object | a serialized Lexical editor state (`{ root: { type: "root", children: [...] } }`) |
-| `status` | `"draft"` \| `"published"` | default `"draft"`; `"published"` sets `published_at` to now |
+| `status` | `"draft"` \| `"published"` \| `"scheduled"` | default `"draft"`; `"published"` sets `published_at` to now; `"scheduled"` requires `publish_at` |
+| `publish_at` | ISO-8601 string with offset | required iff `status` is `"scheduled"`; see §8 |
 
 `201`: Post (without `content`). Slug taken → `409 conflict`.
 
 ### `PATCH /api/v1/posts/:id`
 `:id` must be a UUID. Partial update: only fields present in the body change.
-Scope `posts:write`; additionally `posts:publish` if the post is **currently published** or the body
-changes `status`.
+Scope `posts:write`; additionally `posts:publish` if the post is **currently published or scheduled**
+(i.e. `published_at` is non-null), or the body changes `status` or sends `publish_at`.
 
 Body: any of `title`, `slug`, `excerpt`, `category`, `featured_image_url`, `content_markdown` **or**
-`content_lexical` (not both), `status`, plus optional `if_updated_at`.
+`content_lexical` (not both), `status`, `publish_at`, plus optional `if_updated_at`.
 
 - `if_updated_at`: if present and not equal to the stored `updated_at`, respond `409 conflict` with
   `details: { "current_updated_at": "…" }` and change nothing.
 - Content HTML is regenerated **only** when content is provided; if regeneration fails the request
   returns `500 internal` and nothing is written (the web editor's PUT keeps the old HTML instead).
-- `status: "published"` on a draft sets `published_at` to now; `status: "draft"` clears it.
+- `status: "published"` sets `published_at` to now unless it's already in the past (then it's kept);
+  `status: "scheduled"` + `publish_at` sets it to `publish_at`; `status: "draft"` clears it. `publish_at`
+  without `status` is allowed only on a post that is already scheduled (reschedule).
+- Edit locks apply (§9): if another session holds the post's lock, the request fails with `409 locked`.
 - The server always bumps `updated_at`.
 
 `200`: the updated Post (without `content`). An empty body (no updatable fields) → `400 validation_failed`.
 
 ### `POST /api/v1/posts/:id/publish` / `POST /api/v1/posts/:id/unpublish`
-Scope `posts:publish`. No body. Publish keeps an existing `published_at`, otherwise sets now.
-Unpublish sets `published_at` to null. Both are idempotent. `200`: Post.
+Scope `posts:publish`. Optional body for publish: `{ "at": "<ISO-8601 with offset>" }`.
+- publish without `at`: a draft or a scheduled post goes live now (`published_at` = now); an already
+  published post keeps its `published_at` (idempotent).
+- publish with `at` in the future: the post becomes (or is rescheduled as) `scheduled`. `at` in the past
+  or now → `validation_failed` (use publish without `at`).
+- unpublish sets `published_at` to null (also cancels a schedule). Idempotent.
+`200`: Post. Edit locks apply (§9).
 
 ### `DELETE /api/v1/posts/:id`
 Scope `posts:delete`. `200`: `{ "deleted": true, "id": "uuid" }`. `404` if missing.
@@ -244,3 +255,69 @@ The token string is returned **only** in this response and never stored server-s
 Every successful v1 mutation writes one line to the server log:
 `{"evt":"pawpress.audit","action":"post.update","resource":"post","id":"…","userId":"…","tokenId":"…","ts":"…"}`.
 It never includes content, tokens, or headers.
+
+## 8. Scheduled publishing
+
+`published_at` is the single source of truth:
+
+| `published_at` | `status` | Public site |
+|---|---|---|
+| `null` | `draft` | hidden |
+| > now | `scheduled` | hidden until that moment, then live automatically (no cron job; every public query filters `published_at <= now()`) |
+| ≤ now | `published` | live |
+
+- `publish_at` / `at` must be an ISO-8601 timestamp **with an explicit offset or `Z`** (no local
+  times), strictly in the future, and at most 365 days ahead. Otherwise `validation_failed`. The server
+  stores it in UTC.
+- A scheduled post counts as "published" for permissions: changing, rescheduling, or editing it needs
+  `posts:publish`. A draft-only token can't alter content that is queued to go live.
+- Public pages, category pages, and the anonymous `GET /api/posts` only show posts with
+  `published_at <= now()`. Visiting the URL of a scheduled post returns 404 until it goes live.
+- The web editor offers Draft / Publish now / Schedule (date and time in the browser's time zone, shown
+  with the zone).
+
+## 9. Edit locks (who is editing)
+
+A post can have at most one **edit lock**, a lease held by one editing session. A session is either a
+human in the web editor (cookie session) or an agent (token). Locks make both sides aware of each
+other. Optimistic concurrency (`if_updated_at`) still applies as a second line of defence.
+
+Lock object, as returned by the endpoints below and embedded as `edit_lock` in `GET /posts/:idOrSlug`:
+```json
+{
+  "session_id": "uuid",           // only returned to the session that holds it
+  "holder": { "kind": "user" | "agent", "label": "alice@example.com" | "agent \"weekly-writer\" (alice@example.com)", "user_id": "uuid" },
+  "acquired_at": "…", "expires_at": "…"
+}
+```
+
+Rules:
+- **Humans can override; agents can't.** The web editor can take over a lock held by anyone (force).
+  A token can only acquire a lock that is free or expired, or that its own session already holds.
+- **Agents are refused while someone else holds the lock.** Any token mutation of a post (PATCH,
+  publish, unpublish, delete) fails with `409 locked` if another session holds an unexpired lock,
+  regardless of who. `details.holder` identifies the holder, and `details.taken_over` is `true` when
+  the caller's own session had held it and lost it to a takeover.
+- Leases expire: web editor sessions after 2 minutes without a heartbeat (the editor heartbeats every
+  30 s while the page is open); agent sessions after `ttl_seconds` (default 900, max 3600), renewed by
+  re-acquiring with the same session. An expired lock counts as free.
+- Acquiring a lock needs the same scopes as editing the post (`posts:write`, plus `posts:publish` if it's
+  published or scheduled).
+- **Graceful degradation:** locks live in the `post_edit_locks` table
+  (`supabase/migrations/…_post_edit_locks.sql`, applied by the site owner). Until it exists, lock
+  endpoints return `200 { "locking": "unavailable", "lock": null }`, mutations aren't lock-checked, and
+  `if_updated_at` is the only protection.
+
+### `POST /api/v1/posts/:id/lock`
+Body `{ "session_id"?: uuid, "ttl_seconds"?: 60–3600 }`. Omit `session_id` to start a new session;
+pass it to renew your own. `200 { "locking": "enabled", "lock": Lock }`, or `409 locked`.
+
+### `DELETE /api/v1/posts/:id/lock`
+Header `X-PawPress-Lock-Session: <session_id>`. Releases your own session's lock (no-op if you don't
+hold it). `200 { "released": boolean }`.
+
+### Lock session on mutations
+Token mutations may send `X-PawPress-Lock-Session: <session_id>`. The request succeeds if no one else
+holds an unexpired lock. With a header the caller is "this session"; without one, any unexpired lock
+blocks it. A successful PATCH does **not** release the lock; the CLI releases it explicitly after
+`push`.
