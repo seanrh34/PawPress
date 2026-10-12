@@ -11,6 +11,7 @@ import {
   ensurePostCategory,
   listPostsQuerySchema,
   resolveCategoryOrThrow,
+  resolveCreatePublishedAt,
   resolveLexicalContent,
   toPostResource,
 } from '@/lib/cms/v1';
@@ -60,8 +61,7 @@ export const POST = withApi(
       category_id: category.id,
       featured_image_url: body.featured_image_url ?? null,
       content_lexical: content,
-      published_at:
-        body.status === 'published' ? new Date().toISOString() : null,
+      published_at: resolveCreatePublishedAt(body),
     });
 
     const post = await ensurePostCategory(ctx.auth.db, created);
