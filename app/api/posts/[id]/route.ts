@@ -56,6 +56,17 @@ export async function PUT(
     const body = await request.json();
     let { content_lexical } = body;
 
+    // A future published_at schedules the post; anything present must at least
+    // be a parseable date (the editor sends an ISO string or null).
+    if (body.published_at !== undefined && body.published_at !== null) {
+      if (
+        typeof body.published_at !== 'string' ||
+        Number.isNaN(Date.parse(body.published_at))
+      ) {
+        throw ApiError.validation('published_at must be a valid date');
+      }
+    }
+
     // Process blob images: upload to Supabase and replace with permanent URLs
     if (content_lexical) {
       try {

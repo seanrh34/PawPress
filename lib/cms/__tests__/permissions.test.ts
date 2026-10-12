@@ -84,6 +84,7 @@ describe('assertScope', () => {
 describe('requiredScopesForPostUpdate', () => {
   const draft = { published_at: null };
   const published = { published_at: '2026-01-01T00:00:00.000Z' };
+  const scheduled = { published_at: '2999-01-01T00:00:00.000Z' };
 
   it('needs only posts:write for a plain draft edit', () => {
     expect(requiredScopesForPostUpdate(draft, {})).toEqual(['posts:write']);
@@ -101,6 +102,18 @@ describe('requiredScopesForPostUpdate', () => {
     ).toEqual(['posts:write', 'posts:publish']);
   });
 
+  it('requires publish when scheduling a draft', () => {
+    expect(
+      requiredScopesForPostUpdate(draft, { status: 'scheduled' }),
+    ).toEqual(['posts:write', 'posts:publish']);
+  });
+
+  it('requires publish when a patch sends publish_at', () => {
+    expect(
+      requiredScopesForPostUpdate(draft, { hasPublishAt: true }),
+    ).toEqual(['posts:write', 'posts:publish']);
+  });
+
   it('always requires publish when editing a published post', () => {
     expect(requiredScopesForPostUpdate(published, {})).toEqual([
       'posts:write',
@@ -109,6 +122,13 @@ describe('requiredScopesForPostUpdate', () => {
     expect(
       requiredScopesForPostUpdate(published, { status: 'published' }),
     ).toEqual(['posts:write', 'posts:publish']);
+  });
+
+  it('always requires publish when editing a scheduled post', () => {
+    expect(requiredScopesForPostUpdate(scheduled, {})).toEqual([
+      'posts:write',
+      'posts:publish',
+    ]);
   });
 
   it('requires publish when unpublishing a published post', () => {
@@ -128,6 +148,13 @@ describe('requiredScopesForPostCreate', () => {
 
   it('adds posts:publish when created published', () => {
     expect(requiredScopesForPostCreate({ status: 'published' })).toEqual([
+      'posts:write',
+      'posts:publish',
+    ]);
+  });
+
+  it('adds posts:publish when created scheduled', () => {
+    expect(requiredScopesForPostCreate({ status: 'scheduled' })).toEqual([
       'posts:write',
       'posts:publish',
     ]);
