@@ -2,10 +2,11 @@ import { notFound } from 'next/navigation';
 import { Metadata } from 'next';
 import PostCard from '@/components/PostCard';
 import { Category, Post } from '@/lib/types';
+import { restCompare, restEq } from '@/lib/supabaseRest';
 
 async function getCategory(slug: string): Promise<Category | null> {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/categories?slug=eq.${slug}`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/categories?${restEq('slug', slug)}`, {
       headers: {
         'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
@@ -27,7 +28,14 @@ async function getCategory(slug: string): Promise<Category | null> {
 
 async function getCategoryPosts(categoryId: string): Promise<Post[]> {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/posts?category_id=eq.${categoryId}&published_at=not.is.null&order=published_at.desc`, {
+    const nowIso = new Date().toISOString();
+    const query = [
+      restEq('category_id', categoryId),
+      'published_at=not.is.null',
+      restCompare('published_at', 'lte', nowIso),
+      'order=published_at.desc',
+    ].join('&');
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/posts?${query}`, {
       headers: {
         'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,

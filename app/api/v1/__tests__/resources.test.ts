@@ -258,7 +258,8 @@ const routeCases: RouteCase[] = [
     makeRequest: (token) => authed(`${BASE}/posts/${UUID}`, 'DELETE', token),
     invoke: (req) => postDelete(req, ctxFor(UUID)),
     setup: () => {
-      db.enqueue('posts', { data: postRow() }, { data: null });
+      // route read, then the conditional delete returning the deleted row.
+      db.enqueue('posts', { data: postRow() }, { data: [postRow()] });
     },
   },
   {
@@ -270,8 +271,10 @@ const routeCases: RouteCase[] = [
       authed(`${BASE}/posts/${UUID}/publish`, 'POST', token),
     invoke: (req) => publishPostRoute(req, ctxFor(UUID)),
     setup: () => {
+      // route read, then publish service read/update/ensure re-read.
       db.enqueue(
         'posts',
+        { data: postRow() },
         { data: postRow() },
         { data: barePostRow({ published_at: T1 }) },
         { data: postRow({ published_at: T1 }) },
@@ -287,8 +290,10 @@ const routeCases: RouteCase[] = [
       authed(`${BASE}/posts/${UUID}/unpublish`, 'POST', token),
     invoke: (req) => unpublishPostRoute(req, ctxFor(UUID)),
     setup: () => {
+      // route read, then unpublish service read/update/ensure re-read.
       db.enqueue(
         'posts',
+        { data: postRow({ published_at: T1 }) },
         { data: postRow({ published_at: T1 }) },
         { data: barePostRow({ published_at: null }) },
         { data: postRow({ published_at: null }) },
@@ -501,6 +506,177 @@ describe('post update scopes', () => {
     expect(response.status).toBe(200);
     const eqArgs = db.callsFor('posts', 'eq').map((call) => call.args);
     expect(eqArgs).toContainEqual(['updated_at', T0]);
+  });
+});
+
+describe('scheduled publishing', () => {
+  const day = 24 * 60 * 60 * 1000;
+  const FUTURE = new Date(Date.now() + 30 * day).toISOString();
+
+  it('rejects creating a scheduled post without posts:publish', async () => {
+    const token = await issueToken(['posts:write']);
+    const response = await postsPost(
+      authedJson(`${BASE}/posts`, 'POST', token, {
+        title: 'Hello',
+        category: 'news',
+        content_markdown: '# Hi',
+        status: 'scheduled',
+        publish_at: FUTURE,
+      }),
+    );
+    expect(response.status).toBe(403);
+    expectNoWrites();
+  });
+
+  it('creates a scheduled post with posts:publish', async () => {
+    const token = await issueToken(['posts:write', 'posts:publish']);
+    db.enqueue('categories', { data: categoryRow() }, { data: categoryRow() });
+    db.enqueue(
+      'posts',
+      { data: barePostRow({ published_at: FUTURE }) },
+      { data: postRow({ published_at: FUTURE }) },
+    );
+    const response = await postsPost(
+      authedJson(`${BASE}/posts`, 'POST', token, {
+        title: 'Hello',
+        category: 'news',
+        content_markdown: '# Hi',
+        status: 'scheduled',
+        publish_at: FUTURE,
+      }),
+    );
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.status).toBe('scheduled');
+    expect(body.published_at).toBe(FUTURE);
+  });
+
+  it('rejects a scheduled create without publish_at', async () => {
+    const token = await issueToken(['posts:write', 'posts:publish']);
+    const response = await postsPost(
+      authedJson(`${BASE}/posts`, 'POST', token, {
+        title: 'Hello',
+        category: 'news',
+        content_markdown: '# Hi',
+        status: 'scheduled',
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).error.code).toBe('validation_failed');
+    expectNoWrites();
+  });
+
+  it('rejects a publish_at without an explicit offset', async () => {
+    const token = await issueToken(['posts:write', 'posts:publish']);
+    db.enqueue('categories', { data: categoryRow() });
+    const response = await postsPost(
+      authedJson(`${BASE}/posts`, 'POST', token, {
+        title: 'Hello',
+        category: 'news',
+        content_markdown: '# Hi',
+        status: 'scheduled',
+        publish_at: '2027-01-01T09:00:00',
+      }),
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error.code).toBe('validation_failed');
+    expect(body.error.details.fields.publish_at).toBeDefined();
+    expect(db.callsFor('posts', 'insert')).toHaveLength(0);
+  });
+
+  it('rejects rescheduling a scheduled post without posts:publish', async () => {
+    const token = await issueToken(['posts:write']);
+    db.enqueue('posts', { data: postRow({ published_at: FUTURE }) });
+    const response = await postPatch(
+      authedJson(`${BASE}/posts/${UUID}`, 'PATCH', token, {
+        publish_at: '2999-02-01T00:00:00.000Z',
+      }),
+      ctxFor(UUID),
+    );
+    expect(response.status).toBe(403);
+    expectNoWrites();
+  });
+
+  it('rejects a bare publish_at on a draft without posts:publish', async () => {
+    const token = await issueToken(['posts:write']);
+    db.enqueue('posts', { data: postRow() });
+    const response = await postPatch(
+      authedJson(`${BASE}/posts/${UUID}`, 'PATCH', token, {
+        publish_at: '2999-02-01T00:00:00.000Z',
+      }),
+      ctxFor(UUID),
+    );
+    expect(response.status).toBe(403);
+    expectNoWrites();
+  });
+
+  it('rejects a bare publish_at on a non-scheduled post with a hint', async () => {
+    const token = await issueToken(['posts:write', 'posts:publish']);
+    db.enqueue('posts', { data: postRow() });
+    const response = await postPatch(
+      authedJson(`${BASE}/posts/${UUID}`, 'PATCH', token, {
+        publish_at: '2999-02-01T00:00:00.000Z',
+      }),
+      ctxFor(UUID),
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error.code).toBe('validation_failed');
+    expect(body.error.message).toContain('scheduled');
+    expect(db.callsFor('posts', 'update')).toHaveLength(0);
+  });
+
+  it('reschedules a scheduled post with posts:publish', async () => {
+    const token = await issueToken(['posts:write', 'posts:publish']);
+    const next = new Date(Date.now() + 60 * day).toISOString();
+    db.enqueue(
+      'posts',
+      { data: postRow({ published_at: FUTURE }) },
+      { data: postRow({ published_at: FUTURE }) },
+      { data: barePostRow({ published_at: next }) },
+      { data: postRow({ published_at: next }) },
+    );
+    const response = await postPatch(
+      authedJson(`${BASE}/posts/${UUID}`, 'PATCH', token, { publish_at: next }),
+      ctxFor(UUID),
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.status).toBe('scheduled');
+    expect(body.published_at).toBe(next);
+  });
+
+  it('schedules via POST publish with an at body', async () => {
+    const token = await issueToken(['posts:publish']);
+    const at = new Date(Date.now() + 45 * day).toISOString();
+    db.enqueue(
+      'posts',
+      { data: postRow() },
+      { data: barePostRow({ published_at: at }) },
+      { data: postRow({ published_at: at }) },
+    );
+    const response = await publishPostRoute(
+      authedJson(`${BASE}/posts/${UUID}/publish`, 'POST', token, { at }),
+      ctxFor(UUID),
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.status).toBe('scheduled');
+    expect(body.published_at).toBe(at);
+  });
+
+  it('rejects an at body in the past', async () => {
+    const token = await issueToken(['posts:publish']);
+    const response = await publishPostRoute(
+      authedJson(`${BASE}/posts/${UUID}/publish`, 'POST', token, {
+        at: '2020-01-01T00:00:00Z',
+      }),
+      ctxFor(UUID),
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).error.code).toBe('validation_failed');
+    expect(db.callsFor('posts', 'update')).toHaveLength(0);
   });
 });
 

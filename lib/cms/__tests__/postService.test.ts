@@ -388,11 +388,90 @@ describe('publishPost', () => {
     expect(typeof updatePayload(db).published_at).toBe('string');
   });
 
+  it('moves a scheduled post live now when published without at', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-01T00:00:00.000Z'));
+    try {
+      const db = makeDb({
+        posts: [
+          { data: { ...post, published_at: '2999-01-01T00:00:00.000Z' } },
+          { data: post },
+        ],
+      });
+
+      await publishPost(db.client, UUID);
+
+      expect(updatePayload(db).published_at).toBe('2026-06-01T00:00:00.000Z');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('schedules at the supplied instant', async () => {
+    const at = new Date('2027-01-01T00:00:00.000Z');
+    const db = makeDb({
+      posts: [{ data: { ...post } }, { data: post }],
+    });
+
+    await publishPost(db.client, UUID, { at });
+
+    expect(updatePayload(db).published_at).toBe(at.toISOString());
+  });
+
+  it('reschedules an already scheduled post when at is supplied', async () => {
+    const at = new Date('2027-05-01T00:00:00.000Z');
+    const db = makeDb({
+      posts: [
+        { data: { ...post, published_at: '2999-01-01T00:00:00.000Z' } },
+        { data: post },
+      ],
+    });
+
+    await publishPost(db.client, UUID, { at });
+
+    expect(updatePayload(db).published_at).toBe(at.toISOString());
+  });
+
   it('returns not_found when missing', async () => {
     const db = makeDb({ posts: [{ data: null }] });
     await expect(publishPost(db.client, UUID)).rejects.toMatchObject({
       code: 'not_found',
     });
+  });
+
+  it('conflicts when the post changed between the check and the write', async () => {
+    const db = makeDb({
+      posts: [
+        { data: { ...post, updated_at: T1 } },
+        { data: null },
+        { data: { ...post, updated_at: T2 } },
+      ],
+    });
+
+    await expect(
+      publishPost(db.client, UUID, { ifUpdatedAt: T1 }),
+    ).rejects.toMatchObject({
+      code: 'conflict',
+      details: { current_updated_at: T2 },
+    });
+
+    expect(updateEqFilters(db)).toEqual([
+      ['id', UUID],
+      ['updated_at', T1],
+    ]);
+  });
+
+  it('returns not_found when the row disappears during a conditional write', async () => {
+    const db = makeDb({
+      posts: [
+        { data: { ...post, updated_at: T1 } },
+        { data: null },
+        { data: null },
+      ],
+    });
+    await expect(
+      publishPost(db.client, UUID, { ifUpdatedAt: T1 }),
+    ).rejects.toMatchObject({ code: 'not_found' });
   });
 });
 
@@ -408,6 +487,23 @@ describe('unpublishPost', () => {
     await unpublishPost(db.client, UUID);
     expect(updatePayload(db).published_at).toBeNull();
   });
+
+  it('conflicts when the post changed between the check and the write', async () => {
+    const db = makeDb({
+      posts: [
+        { data: { ...post, updated_at: T1 } },
+        { data: null },
+        { data: { ...post, updated_at: T2 } },
+      ],
+    });
+
+    await expect(
+      unpublishPost(db.client, UUID, { ifUpdatedAt: T1 }),
+    ).rejects.toMatchObject({
+      code: 'conflict',
+      details: { current_updated_at: T2 },
+    });
+  });
 });
 
 describe('deletePost', () => {
@@ -422,6 +518,31 @@ describe('deletePost', () => {
     await expect(deletePost(db.client, UUID)).rejects.toMatchObject({
       code: 'not_found',
     });
+  });
+
+  it('conflicts when the post changed between the check and the delete', async () => {
+    const db = makeDb({
+      posts: [
+        { data: [] },
+        { data: { ...post, updated_at: T2 } },
+      ],
+    });
+
+    await expect(
+      deletePost(db.client, UUID, { ifUpdatedAt: T1 }),
+    ).rejects.toMatchObject({
+      code: 'conflict',
+      details: { current_updated_at: T2 },
+    });
+    const deleteEq = db.callsFor('posts', 'eq').map((call) => call.args);
+    expect(deleteEq).toContainEqual(['updated_at', T1]);
+  });
+
+  it('deletes conditionally when the revision matches', async () => {
+    const db = makeDb({ posts: [{ data: [post] }] });
+    await expect(
+      deletePost(db.client, UUID, { ifUpdatedAt: T1 }),
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -483,5 +604,40 @@ describe('listPosts', () => {
     const db = makeDb({ posts: [{ data: [], count: 0 }] });
     await listPosts(db.client, { status: 'draft' });
     expect(db.callsFor('posts', 'is')[0].args).toEqual(['published_at', null]);
+  });
+
+  it('filters published posts with published_at <= now', async () => {
+    const now = '2026-06-01T00:00:00.000Z';
+    const db = makeDb({ posts: [{ data: [], count: 0 }] });
+    await listPosts(db.client, { status: 'published', now });
+    expect(db.callsFor('posts', 'not')[0].args).toEqual([
+      'published_at',
+      'is',
+      null,
+    ]);
+    expect(db.callsFor('posts', 'lte')[0].args).toEqual(['published_at', now]);
+    expect(db.callsFor('posts', 'gt')).toHaveLength(0);
+  });
+
+  it('filters scheduled posts with published_at > now', async () => {
+    const now = '2026-06-01T00:00:00.000Z';
+    const db = makeDb({ posts: [{ data: [], count: 0 }] });
+    await listPosts(db.client, { status: 'scheduled', now });
+    expect(db.callsFor('posts', 'not')[0].args).toEqual([
+      'published_at',
+      'is',
+      null,
+    ]);
+    expect(db.callsFor('posts', 'gt')[0].args).toEqual(['published_at', now]);
+    expect(db.callsFor('posts', 'lte')).toHaveLength(0);
+  });
+
+  it('applies no published_at filter for status all', async () => {
+    const db = makeDb({ posts: [{ data: [], count: 0 }] });
+    await listPosts(db.client, { status: 'all' });
+    expect(db.callsFor('posts', 'not')).toHaveLength(0);
+    expect(db.callsFor('posts', 'is')).toHaveLength(0);
+    expect(db.callsFor('posts', 'lte')).toHaveLength(0);
+    expect(db.callsFor('posts', 'gt')).toHaveLength(0);
   });
 });

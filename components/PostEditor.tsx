@@ -1,17 +1,37 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Editor from '@/components/Editor';
 import FeaturedImageUpload from '@/components/FeaturedImageUpload';
+import { useEditLock, lockAllowsSave } from '@/components/editLock';
 import { SerializedEditorState } from 'lexical';
 import { Post, Category } from '@/lib/types';
+import { postStatus } from '@/lib/cms/status';
 import { uploadImageViaServer } from '@/lib/clientUploads';
 
 interface PostEditorProps {
   post?: Post;
   mode: 'create' | 'edit';
+}
+
+type PublishMode = 'draft' | 'now' | 'schedule';
+
+// A datetime-local value (`YYYY-MM-DDTHH:mm`) in the browser's time zone.
+function toLocalDateTimeInput(iso: string): string {
+  const date = new Date(iso);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function isFutureIso(iso: string | null | undefined): boolean {
+  return !!iso && new Date(iso).getTime() > Date.now();
+}
+
+function initialPublishMode(post?: Post): PublishMode {
+  if (!post?.published_at) return 'draft';
+  return isFutureIso(post.published_at) ? 'schedule' : 'now';
 }
 
 export default function PostEditor({ post, mode }: PostEditorProps) {
@@ -20,7 +40,13 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
   const [slug, setSlug] = useState(post?.slug || '');
   const [excerpt, setExcerpt] = useState(post?.excerpt || '');
   const [content, setContent] = useState<SerializedEditorState | null>(post?.content_lexical || null);
-  const [isPublished, setIsPublished] = useState(!!post?.published_at);
+  const [publishMode, setPublishMode] = useState<PublishMode>(() => initialPublishMode(post));
+  const [scheduleAt, setScheduleAt] = useState(() => (isFutureIso(post?.published_at) ? toLocalDateTimeInput(post!.published_at!) : ''));
+  // The schedule the post was loaded with. If the field still matches it, we
+  // send the original published_at untouched (no lost seconds) even when other
+  // fields change — and we don't re-validate a time that is now in the past.
+  const [initialScheduleAt] = useState(() => (isFutureIso(post?.published_at) ? toLocalDateTimeInput(post!.published_at!) : ''));
+  const [timeZone, setTimeZone] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(post?.featured_image_url || null);
   const [featuredImageFile, setFeaturedImageFile] = useState<File>();
@@ -28,6 +54,12 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryId, setCategoryId] = useState(post?.category_id || '');
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [loadedUpdatedAt, setLoadedUpdatedAt] = useState(post?.updated_at ?? null);
+  const [conflict, setConflict] = useState<string | null>(null);
+
+  const editMode = mode === 'edit' && !!post?.id;
+  const lock = useEditLock(post?.id, editMode);
+  const canSave = !editMode || lockAllowsSave(lock.state);
 
   // Fetch categories on mount
   useEffect(() => {
@@ -52,6 +84,12 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
 
     fetchCategories();
   }, [mode, categoryId]);
+
+  // Read the browser time zone after mount so the server-rendered markup
+  // doesn't mismatch the client.
+  useEffect(() => {
+    setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  }, []);
 
   // Auto-generate slug from title (only in create mode)
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -101,10 +139,15 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (overwrite = false) => {
     // Validate required fields
     if (!title || !slug) {
       alert('Title and slug are required');
+      return;
+    }
+
+    if (editMode && !lockAllowsSave(lock.state)) {
+      alert('You are not currently editing this post.');
       return;
     }
 
@@ -134,7 +177,26 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
       return;
     }
 
+    // Only validate the schedule when the user actually changed it; an
+    // untouched schedule is sent back verbatim (its time may already have
+    // passed, in which case the post is simply published now/at that time).
+    const scheduleUnchanged =
+      publishMode === 'schedule' &&
+      post?.published_at != null &&
+      scheduleAt === initialScheduleAt;
+    if (publishMode === 'schedule' && !scheduleUnchanged) {
+      if (!scheduleAt) {
+        alert('Please choose a date and time to schedule the post');
+        return;
+      }
+      if (new Date(scheduleAt).getTime() <= Date.now()) {
+        alert('The schedule time must be in the future');
+        return;
+      }
+    }
+
     setIsSaving(true);
+    setConflict(null);
 
     try {
       // Delete old image if it exists and is different
@@ -148,28 +210,80 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
       const url = mode === 'create' ? '/api/posts' : `/api/posts/${post?.id}`;
       const method = mode === 'create' ? 'POST' : 'PUT';
 
+      const existingPublishedAt = post?.published_at ?? null;
+      const publishedAt =
+        publishMode === 'draft'
+          ? null
+          : publishMode === 'schedule'
+            ? scheduleUnchanged && existingPublishedAt
+              ? existingPublishedAt
+              : new Date(scheduleAt).toISOString()
+            : existingPublishedAt && new Date(existingPublishedAt).getTime() <= Date.now()
+              ? existingPublishedAt
+              : new Date().toISOString();
+
+      const payload: Record<string, unknown> = {
+        title,
+        slug,
+        excerpt,
+        content_lexical: content,
+        featured_image_url: newFeaturedImageUrl,
+        published_at: publishedAt,
+        category_id: categoryId,
+      };
+
+      // Edit mode carries the lock session and the revision this editor loaded,
+      // so the server can detect takeovers and conflicting saves atomically.
+      if (editMode) {
+        if (lock.state.sessionId) {
+          payload.lock_session_id = lock.state.sessionId;
+        }
+        if (!overwrite && loadedUpdatedAt) {
+          payload.if_updated_at = loadedUpdatedAt;
+        }
+      }
+
       const response = await fetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          title,
-          slug,
-          excerpt,
-          content_lexical: content,
-          featured_image_url: newFeaturedImageUrl,
-          published_at: isPublished ? (post?.published_at || new Date().toISOString()) : null,
-          category_id: categoryId,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to ${mode} post`);
+        const errorData = await response.json().catch(() => ({} as Record<string, unknown>));
+
+        if (response.status === 409 && errorData.code === 'locked') {
+          const holder = errorData.holder as
+            | { kind: 'user' | 'agent'; label: string; user_id: string }
+            | undefined;
+          if (holder) {
+            lock.markLost({
+              holder,
+              acquired_at: (errorData.acquired_at as string) ?? new Date().toISOString(),
+              expires_at: (errorData.expires_at as string) ?? new Date().toISOString(),
+            });
+          }
+          return;
+        }
+
+        if (response.status === 409 && errorData.code === 'conflict') {
+          setConflict((errorData.current_updated_at as string) ?? '');
+          return;
+        }
+
+        throw new Error(
+          (errorData.error as string) || `Failed to ${mode} post`,
+        );
       }
 
       const data = await response.json();
+      if (editMode) {
+        setLoadedUpdatedAt(data.updated_at ?? loadedUpdatedAt);
+        // Release our lock before leaving the page.
+        lock.release();
+      }
       router.push('/admin');
       router.refresh();
     } catch (error) {
@@ -181,6 +295,35 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
     }
   };
 
+  const currentStatus = postStatus(post?.published_at ?? null);
+  const submitLabel = isSaving
+    ? 'Saving...'
+    : publishMode === 'draft'
+      ? 'Save as Draft'
+      : publishMode === 'now'
+        ? currentStatus === 'published'
+          ? 'Update'
+          : 'Publish'
+        : currentStatus === 'scheduled'
+          ? 'Update'
+          : 'Schedule';
+
+  const formatLockTime = (iso: string | null): string => {
+    if (!iso) return '';
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime())
+      ? iso
+      : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const copyContent = useCallback(() => {
+    try {
+      void navigator.clipboard?.writeText(JSON.stringify(content ?? null, null, 2));
+    } catch {
+      // Clipboard access is best-effort.
+    }
+  }, [content]);
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Main Content */}
@@ -188,6 +331,111 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
         <h1 className="text-3xl font-bold text-gray-900 mb-8">
           {mode === 'create' ? 'Create New Post' : 'Edit Post'}
         </h1>
+
+        {editMode && lock.state.status === 'unavailable' && (
+          <div className="mb-6 rounded-lg border border-gray-300 bg-gray-100 px-4 py-3 text-sm text-gray-700">
+            Live edit locking isn&apos;t enabled on this site (apply the
+            post_edit_locks migration). Conflicting saves are still detected.
+          </div>
+        )}
+
+        {editMode && lock.state.status === 'error' && (
+          <div className="mb-6 rounded-lg border border-gray-300 bg-gray-100 px-4 py-3 text-sm text-gray-700">
+            <p>Couldn&apos;t check whether someone else is editing (retrying…).</p>
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => void handleSubmit()}
+                className="btn-secondary"
+              >
+                Save anyway
+              </button>
+            </div>
+          </div>
+        )}
+
+        {editMode && lock.state.status === 'blocked' && lock.state.holder && (
+          <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900">
+            <p className="text-sm">
+              {lock.state.holder.kind === 'agent' ? (
+                <>
+                  🤖 An AI agent is editing this post: {lock.state.holder.label},
+                  since {formatLockTime(lock.state.acquiredAt)}, lease expires{' '}
+                  {formatLockTime(lock.state.expiresAt)}. If you take over, the
+                  agent&apos;s pending changes will be rejected and it will report
+                  that an admin is editing.
+                </>
+              ) : (
+                <>
+                  👤 {lock.state.holder.label} is editing this post in another
+                  session since {formatLockTime(lock.state.acquiredAt)}.
+                </>
+              )}
+            </p>
+            <div className="mt-3 flex gap-3">
+              <button
+                type="button"
+                onClick={() => void lock.takeOver()}
+                className="btn-primary"
+              >
+                Take over editing
+              </button>
+              <Link href="/admin" className="btn-secondary">
+                Back to posts
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {editMode && lock.state.status === 'lost' && lock.state.holder && (
+          <div className="mb-6 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-red-900">
+            <p className="text-sm">
+              {lock.state.holder.label} took over editing at{' '}
+              {formatLockTime(lock.state.acquiredAt)}. Your unsaved changes have
+              NOT been saved.
+            </p>
+            <div className="mt-3 flex gap-3">
+              <button
+                type="button"
+                onClick={() => void lock.takeOver()}
+                className="btn-primary"
+              >
+                Take back editing
+              </button>
+              <button
+                type="button"
+                onClick={copyContent}
+                className="btn-secondary"
+              >
+                Copy my content
+              </button>
+            </div>
+          </div>
+        )}
+
+        {conflict !== null && (
+          <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900">
+            <p className="text-sm">
+              This post was changed since you opened it (possibly by an agent).
+            </p>
+            <div className="mt-3 flex gap-3">
+              <button
+                type="button"
+                onClick={() => void handleSubmit(true)}
+                className="btn-primary"
+              >
+                Overwrite their changes
+              </button>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="btn-secondary"
+              >
+                Reload latest
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-6">
           {/* Title */}
@@ -295,29 +543,69 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
             />
           </div>
 
-          {/* Publish Toggle */}
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="isPublished"
-              checked={isPublished}
-              onChange={(e) => setIsPublished(e.target.checked)}
-              className="form-checkbox"
-            />
-            <label htmlFor="isPublished" className="form-label mb-0">
-              {mode === 'create' ? 'Publish immediately' : 'Published'}
-            </label>
+          {/* Publish / Schedule */}
+          <div className="space-y-2">
+            <span className="form-label">Publishing</span>
+            <div className="flex flex-wrap gap-6">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="publishMode"
+                  checked={publishMode === 'draft'}
+                  onChange={() => setPublishMode('draft')}
+                  className="form-checkbox"
+                />
+                Draft
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="publishMode"
+                  checked={publishMode === 'now'}
+                  onChange={() => setPublishMode('now')}
+                  className="form-checkbox"
+                />
+                Publish now
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="publishMode"
+                  checked={publishMode === 'schedule'}
+                  onChange={() => setPublishMode('schedule')}
+                  className="form-checkbox"
+                />
+                Schedule
+              </label>
+            </div>
+            {publishMode === 'schedule' && (
+              <div className="mt-2">
+                <input
+                  type="datetime-local"
+                  id="scheduleAt"
+                  value={scheduleAt}
+                  onChange={(e) => setScheduleAt(e.target.value)}
+                  className="form-input"
+                />
+                <p className="form-hint">
+                  {timeZone ? `Time zone: ${timeZone}. ` : ''}
+                  {scheduleAt
+                    ? `Goes live automatically at ${new Date(scheduleAt).toLocaleString()}.`
+                    : 'Goes live automatically at the chosen time.'}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Actions */}
           <div className="flex gap-4 pt-6 border-t border-gray-200">
             <button
               type="button"
-              onClick={handleSubmit}
-              disabled={isSaving}
+              onClick={() => void handleSubmit()}
+              disabled={isSaving || !canSave}
               className="btn-primary"
             >
-              {isSaving ? 'Saving...' : mode === 'create' ? (isPublished ? 'Publish Post' : 'Save as Draft') : 'Update Post'}
+              {submitLabel}
             </button>
             <Link
               href="/admin"

@@ -9,7 +9,7 @@ export interface Post {
   title: string;
   slug: string;
   excerpt: string;
-  status: 'draft' | 'published';
+  status: 'draft' | 'scheduled' | 'published';
   published_at: string | null;
   category: PostCategory | null;
   featured_image_url: string | null;
@@ -17,6 +17,31 @@ export interface Post {
   updated_at: string;
   content?: unknown;
   content_format?: string;
+  edit_lock?: EditLock | null;
+  locking?: 'enabled' | 'unavailable';
+}
+
+export interface LockHolder {
+  kind: 'user' | 'agent';
+  label: string;
+  user_id: string;
+}
+
+export interface EditLock {
+  session_id?: string;
+  holder: LockHolder;
+  acquired_at: string;
+  expires_at: string;
+}
+
+export interface LockResponse {
+  locking: 'enabled' | 'unavailable';
+  acquired?: boolean;
+  lock: EditLock | null;
+}
+
+export interface LockReleaseResponse {
+  released: boolean;
 }
 
 export interface Category {

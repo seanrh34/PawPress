@@ -2,17 +2,33 @@
 
 import Link from 'next/link';
 import { Post } from '@/lib/types';
+import { postStatus } from '@/lib/cms/status';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function AdminDashboard() {
   const [posts, setPosts] = useState<Post[]>([]);
+  const [locks, setLocks] = useState<Record<string, { kind: 'user' | 'agent'; label: string }>>({});
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
     fetchPosts();
   }, []);
+
+  const fetchLocks = async () => {
+    try {
+      const response = await fetch('/api/posts/locks');
+      if (!response.ok) return;
+      const data = await response.json();
+      // Skipped entirely when the post_edit_locks migration isn't applied.
+      if (data.locking === 'enabled') {
+        setLocks(data.locks ?? {});
+      }
+    } catch (err) {
+      console.error('Error fetching edit locks:', err);
+    }
+  };
 
   const fetchPosts = async () => {
     try {
@@ -41,6 +57,7 @@ export default function AdminDashboard() {
       );
       
       setPosts(postsWithCategories);
+      void fetchLocks();
     } catch (error) {
       console.error('Error fetching posts:', error);
     } finally {
@@ -71,8 +88,10 @@ export default function AdminDashboard() {
     }
   };
 
-  const publishedCount = posts.filter(p => p.published_at).length;
-  const draftCount = posts.filter(p => !p.published_at).length;
+  const now = new Date();
+  const publishedCount = posts.filter(p => postStatus(p.published_at, now) === 'published').length;
+  const scheduledCount = posts.filter(p => postStatus(p.published_at, now) === 'scheduled').length;
+  const draftCount = posts.filter(p => postStatus(p.published_at, now) === 'draft').length;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -128,7 +147,7 @@ export default function AdminDashboard() {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">{posts.length} Total Posts</h3>
-                <p className="text-sm text-gray-600">{publishedCount} published, {draftCount} drafts</p>
+                <p className="text-sm text-gray-600">{publishedCount} published, {scheduledCount} scheduled, {draftCount} drafts</p>
               </div>
             </div>
           </div>
@@ -193,12 +212,27 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {posts.map((post) => (
+                  {posts.map((post) => {
+                    const status = postStatus(post.published_at, now);
+                    return (
                     <tr key={post.id} className="hover:bg-gray-50">
                       <td className="px-4 py-4">
                         <div>
                           <div className="font-medium text-gray-900">{post.title}</div>
                           <div className="text-sm text-gray-500">/{post.slug}</div>
+                          {locks[post.id] && (
+                            <div
+                              className={`text-xs mt-1 ${
+                                locks[post.id].kind === 'agent'
+                                  ? 'text-purple-700'
+                                  : 'text-amber-700'
+                              }`}
+                            >
+                              {locks[post.id].kind === 'agent'
+                                ? `🤖 being edited by ${locks[post.id].label}`
+                                : `✏️ being edited by ${locks[post.id].label}`}
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-4">
@@ -212,19 +246,26 @@ export default function AdminDashboard() {
                       </td>
                       <td className="px-4 py-4">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          post.published_at 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-gray-100 text-gray-800'
+                          status === 'published'
+                            ? 'bg-green-100 text-green-800'
+                            : status === 'scheduled'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-gray-100 text-gray-800'
                         }`}>
-                          {post.published_at ? 'Published' : 'Draft'}
+                          {status === 'published' ? 'Published' : status === 'scheduled' ? 'Scheduled' : 'Draft'}
                         </span>
+                        {status === 'scheduled' && post.published_at && (
+                          <div className="text-xs text-amber-700 mt-1">
+                            Goes live {new Date(post.published_at).toLocaleString()}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-sm text-gray-600">
                         {new Date(post.published_at || post.created_at).toLocaleDateString()}
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex gap-2 items-center">
-                          {post.published_at ? (
+                          {status === 'published' ? (
                             <Link
                               href={`/${post.slug}`}
                               className="text-blue-600 hover:text-blue-800 text-sm"
@@ -253,7 +294,8 @@ export default function AdminDashboard() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

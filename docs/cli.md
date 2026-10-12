@@ -33,8 +33,8 @@ The HTTP API underneath is specified in [`docs/cli-api.md`](./cli-api.md).
 | Scope | Lets the token… |
 |---|---|
 | `posts:read` | list and read posts, including drafts |
-| `posts:write` | create drafts, and edit posts that **aren't** published |
-| `posts:publish` | publish/unpublish, edit already-published posts, create posts as published |
+| `posts:write` | create drafts, and edit posts that are **neither published nor scheduled** |
+| `posts:publish` | publish now, schedule, unpublish/unschedule, edit published or scheduled posts, create posts as published or scheduled |
 | `posts:delete` | delete posts |
 | `categories:write` | create, rename, and delete categories |
 | `media:upload` | upload images |
@@ -89,16 +89,77 @@ slug: my-post
 category: news            # category slug
 excerpt: One-line summary
 featured_image: https://…/cover.png   # or a relative path to a local file
-status: draft             # draft | published
+status: draft             # draft | scheduled | published
+publish_at: 2026-10-20T09:00:00+08:00  # only for status: scheduled
 updated_at: 2026-10-06T12:00:00.123456+00:00   # read-only; used for conflict detection
+lock_session: 7c9e…       # read-only; the edit lock you hold (if any)
+lock_expires_at: 2026-10-06T12:15:00+00:00     # read-only
 ---
 ```
 
-- **Don't edit `id` or `updated_at`.** `push` sends `updated_at` so the server can reject your
-  change if someone else edited the post since you pulled it.
+- **Don't edit `id`, `updated_at`, `lock_session` or `lock_expires_at`.** `push` sends `updated_at` so the
+  server can reject your change if someone else edited the post since you pulled it, and sends
+  `lock_session` so the server knows you still hold the edit lock.
 - **Use `--write-back`** so the file gets the new `updated_at`. Otherwise your next push of the same
   file conflicts.
-- Changing `status` or editing a published post needs `posts:publish`.
+- Changing `status` or editing a published **or scheduled** post needs `posts:publish`.
+
+### Edit locks (who is editing)
+
+`posts pull` acquires an **edit lock** by default (an agent lease of 900 s, or `--lock-ttl <seconds>`,
+60–3600), so a human opening the same post in the web editor sees a warning. The lock must be
+available on the server: locking needs the `post_edit_locks` migration. Until it is applied, `pull`
+prints `edit locking unavailable on this site; relying on updated_at conflict detection` on stderr
+and continues.
+
+- If a human or another agent is already editing, `pull` **writes nothing** and exits **5** with
+  `error: not editing: <message>` naming them (JSON: `error.code` is `"locked"` and
+  `error.details.holder` says who). Do **not** retry in a loop and do **not** try to force your way
+  in: report it and try again on the next scheduled run.
+- If the token can't edit the post (it's published/scheduled and the token lacks `posts:publish`),
+  `pull` prints `not locking: this token can't edit this post` on stderr and continues **without** a
+  lock; `posts lock` still fails with exit 3.
+- An agent may hold at most **5 locks** per user. A sixth `pull` (or `lock`) exits **5** with the
+  server message `Too many active edit locks for this user (max 5); release some with pawpress posts
+  unlock`. Release one with `pawpress posts unlock <id> --session <uuid>` and retry.
+- `push` sends `lock_session` and releases the lock on success. Use `--keep-lock` for a long edit and
+  renew it with `pawpress posts lock <id|slug> --session <uuid>`; release it early with
+  `pawpress posts unlock <id> --session <uuid>`. `--no-lock` on `pull` skips locking entirely.
+- If you lose the lock to an admin takeover, `push` exits **5** with
+  `error: failed to apply edits: an admin took over editing; your changes are still in <file>`.
+  Your file is not modified.
+- While you hold a lock, pass `--session <uuid>` to `posts update`, `publish`, `unpublish` and
+  `delete` so your own lock doesn't refuse you (`posts update --file f.md` also reads the
+  `lock_session` from that file's front matter). Without it, any active lock held by someone else
+  refuses them with `error: <verb> refused: <message>` (exit 5).
+
+### Scheduling a post
+
+`published_at` is the single source of truth: `status` is never stored, it is derived (null =
+draft, in the future = scheduled, otherwise published). Scheduling therefore needs `posts:publish` —
+a draft-only token cannot schedule or reschedule anything.
+
+```sh
+# From a file's front matter (`status: scheduled` + `publish_at`):
+pawpress posts push scheduled-post.md --write-back --json
+
+# Or directly, without editing front matter:
+pawpress posts push scheduled-post.md --at 2026-10-20T09:00:00+08:00 --json
+pawpress posts create --title "T" --category news --file body.md --at 2026-10-20T09:00:00+08:00 --json
+pawpress posts publish <id> --at 2026-10-20T09:00:00+08:00 --json   # reschedule
+```
+
+- Times **must be explicit**: an ISO-8601 timestamp with a `Z` or a numeric offset
+  (`2026-10-20T09:00:00+08:00`), strictly in the future. A bare local time like
+  `2026-10-20T09:00:00` is rejected locally (exit 2). The server stores UTC and will accept times at
+  most 365 days ahead.
+- `--publish` still means "publish now" and cannot be combined with `--at` (exit 2).
+- To **cancel** a schedule, unpublish it and it becomes a draft again:
+  `pawpress posts unpublish <id> --json`.
+- A scheduled post counts as published for permissions: editing its content also needs
+  `posts:publish`.
+- Scheduled posts stay hidden from the public site (and the anonymous API) until they go live; their
+  URL returns 404 until then.
 
 ### Creating a post
 
@@ -112,10 +173,16 @@ Or: `pawpress posts create --title "T" --category news --file body.md --json`.
 
 ### Handling conflicts (exit code 5)
 
-The post changed on the server after you pulled it. **Don't use `--force` by default.** Pull it
-again into a new file, merge your changes into the fresh version, and push that. Only use `--force`
-if the human tells you to overwrite their changes. Exit 5 on create means the slug is taken: pick a
-different `slug`.
+Code 5 covers two distinct situations, distinguished by `error.code` in JSON mode:
+
+- **`"locked"` — someone is editing.** A human admin or another agent holds the edit lock. `pull`
+  exits with `not editing: <message>` and `push` with `failed to apply edits: <message>`, both naming
+  the holder. **Do not retry in a loop and do not use `--force`.** Report who is editing and try
+  again on the next scheduled run.
+- **`"conflict"` — the post changed since you pulled it.** `updated_at` no longer matches. **Don't use
+  `--force` by default.** Pull it again into a new file, merge your changes into the fresh version,
+  and push that. Only use `--force` if the human tells you to overwrite their changes. Exit 5 on
+  create means the slug is taken: pick a different `slug`.
 
 ### Images
 
@@ -146,15 +213,17 @@ A single text block (a run of consecutive non-blank lines, i.e. one paragraph) m
 ```
 pawpress auth login --url <site>        # token from stdin
 pawpress auth status | logout
-pawpress posts list [--status draft|published|all] [--category <slug>] [--search <q>] [--limit N] [--offset N]
+pawpress posts list [--status draft|scheduled|published|all] [--category <slug>] [--search <q>] [--limit N] [--offset N]
 pawpress posts get <id|slug> [--format markdown|lexical|html] [-o file]
-pawpress posts pull <id|slug> [-o file.md]
-pawpress posts push <file.md> [--publish] [--dry-run] [--force] [--write-back] [--allow-outside-dir]
-pawpress posts create --title T --category C [--slug S] [--excerpt E] (--file f.md | --stdin) [--publish] [--dry-run] [--allow-outside-dir]
+pawpress posts pull <id|slug> [-o file.md] [--lock-ttl <s>] [--no-lock]
+pawpress posts push <file.md> [--publish] [--at <ISO>] [--dry-run] [--force] [--write-back] [--keep-lock] [--allow-outside-dir]
+pawpress posts create --title T --category C [--slug S] [--excerpt E] (--file f.md | --stdin) [--publish] [--at <ISO>] [--dry-run] [--allow-outside-dir]
 pawpress posts update <id> [--title T] [--slug S] [--excerpt E] [--category C] [--featured-image URL]
-                           [--file f.md | --stdin] [--if-updated-at ts] [--dry-run] [--allow-outside-dir]
-pawpress posts publish <id> | unpublish <id>
-pawpress posts delete <id> --yes [--dry-run]
+                           [--file f.md | --stdin] [--if-updated-at ts] [--session <uuid>] [--dry-run] [--allow-outside-dir]
+pawpress posts publish <id> [--at <ISO>] [--session <uuid>] | unpublish <id> [--session <uuid>]
+pawpress posts delete <id> --yes [--session <uuid>] [--dry-run]
+pawpress posts lock <id|slug> [--ttl <s>] [--session <uuid>]
+pawpress posts unlock <id> --session <uuid>
 pawpress categories list
 pawpress categories create --name N --slug S --description D [--dry-run]
 pawpress categories update <id> [--name N] [--slug S] [--description D] [--dry-run]
@@ -179,6 +248,6 @@ Configuration precedence: flags → `PAWPRESS_URL`/`PAWPRESS_TOKEN` → `~/.conf
 | 2 | usage error (bad arguments, missing `--yes`, missing/unsupported local file) | fix the command |
 | 3 | authentication or permission (401/403) | check `auth status`; ask for a token with the needed scope |
 | 4 | not found | check the id/slug with `posts list` |
-| 5 | conflict (stale `updated_at`, slug taken, category still has posts) | pull, merge, push again |
+| 5 | conflict (`conflict` = stale `updated_at`/taken slug; `locked` = someone else is editing) | for `conflict`: pull, merge, push again; for `locked`: report who and retry later |
 | 6 | validation (400/413/415), e.g. unsafe URL or file too large | read `error.details`, fix the input |
 | 7 | network (server unreachable, timeout) | check the URL and connectivity |

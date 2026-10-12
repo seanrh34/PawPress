@@ -354,3 +354,138 @@ describe('posts pull', () => {
     expect(parsed.body).toBe('Body');
   });
 });
+
+describe('scheduled publishing', () => {
+  const FUTURE = '2099-01-01T00:00:00+00:00';
+
+  it('pull writes publish_at only for scheduled posts', async () => {
+    const scheduled = makeFetch(() =>
+      response(200, serverPost({ status: 'scheduled', published_at: FUTURE, content: 'Body' })),
+    );
+    const first = makeHarness({ env: ENV, fetch: scheduled.fetch });
+    expect(await first.run(['posts', 'pull', 'hello'])).toBe(0);
+    const scheduledData = parseFrontMatter(first.stdoutText()).data;
+    expect(scheduledData.status).toBe('scheduled');
+    expect(scheduledData.publish_at).toBe(FUTURE);
+
+    const draft = makeFetch(() => response(200, serverPost({ content: 'Body' })));
+    const second = makeHarness({ env: ENV, fetch: draft.fetch });
+    expect(await second.run(['posts', 'pull', 'hello'])).toBe(0);
+    expect(parseFrontMatter(second.stdoutText()).data.publish_at).toBeUndefined();
+  });
+
+  it('push sends status scheduled and publish_at from front matter', async () => {
+    const dir = await makeTempDir();
+    const file = await writeTempFile(
+      dir,
+      'post.md',
+      `---\nid: ${POST_ID}\ntitle: X\ncategory: news\nstatus: scheduled\npublish_at: ${FUTURE}\nupdated_at: ${UPDATED}\n---\nBody`,
+    );
+    const harness = makeFetch(() =>
+      response(200, serverPost({ status: 'scheduled', published_at: FUTURE })),
+    );
+    const h = makeHarness({ env: ENV, cwd: dir, fetch: harness.fetch });
+    expect(await h.run(['posts', 'push', file, '--json'])).toBe(0);
+    const body = bodyOf(harness.calls[0]?.init);
+    expect(body.status).toBe('scheduled');
+    expect(body.publish_at).toBe(FUTURE);
+  });
+
+  it('push requires publish_at when status is scheduled', async () => {
+    const dir = await makeTempDir();
+    const file = await writeTempFile(
+      dir,
+      'post.md',
+      `---\nid: ${POST_ID}\ntitle: X\ncategory: news\nstatus: scheduled\nupdated_at: ${UPDATED}\n---\nBody`,
+    );
+    const harness = makeFetch(() => response(200, serverPost()));
+    const h = makeHarness({ env: ENV, cwd: dir, fetch: harness.fetch });
+    expect(await h.run(['posts', 'push', file])).toBe(2);
+    expect(h.stderrText()).toMatch(/publish_at/);
+    expect(harness.calls).toHaveLength(0);
+  });
+
+  it('rejects a front matter publish_at without status scheduled', async () => {
+    const dir = await makeTempDir();
+    const file = await writeTempFile(
+      dir,
+      'post.md',
+      `---\nid: ${POST_ID}\ntitle: X\ncategory: news\nstatus: draft\npublish_at: ${FUTURE}\nupdated_at: ${UPDATED}\n---\nBody`,
+    );
+    const harness = makeFetch(() => response(200, serverPost()));
+    const h = makeHarness({ env: ENV, cwd: dir, fetch: harness.fetch });
+    expect(await h.run(['posts', 'push', file])).toBe(2);
+    expect(harness.calls).toHaveLength(0);
+  });
+
+  it('--at schedules a create', async () => {
+    const dir = await makeTempDir();
+    const file = await writeTempFile(dir, 'post.md', '---\ntitle: X\ncategory: news\n---\nBody');
+    const harness = makeFetch(() =>
+      response(201, serverPost({ status: 'scheduled', published_at: FUTURE })),
+    );
+    const h = makeHarness({ env: ENV, cwd: dir, fetch: harness.fetch });
+    expect(await h.run(['posts', 'push', file, '--at', FUTURE, '--json'])).toBe(0);
+    const body = bodyOf(harness.calls[0]?.init);
+    expect(body.status).toBe('scheduled');
+    expect(body.publish_at).toBe(FUTURE);
+  });
+
+  it('--at with --publish is a usage error', async () => {
+    const dir = await makeTempDir();
+    const file = await writeTempFile(dir, 'post.md', '---\ntitle: X\ncategory: news\n---\nBody');
+    const harness = makeFetch(() => response(201, serverPost()));
+    const h = makeHarness({ env: ENV, cwd: dir, fetch: harness.fetch });
+    expect(await h.run(['posts', 'push', file, '--at', FUTURE, '--publish'])).toBe(2);
+    expect(harness.calls).toHaveLength(0);
+  });
+
+  it('rejects --at without an offset or in the past', async () => {
+    const dir = await makeTempDir();
+    const file = await writeTempFile(dir, 'post.md', '---\ntitle: X\ncategory: news\n---\nBody');
+    const harness = makeFetch(() => response(201, serverPost()));
+
+    const noOffset = makeHarness({ env: ENV, cwd: dir, fetch: harness.fetch });
+    expect(await noOffset.run(['posts', 'push', file, '--at', '2099-01-01T00:00:00'])).toBe(2);
+    expect(noOffset.stderrText()).toMatch(/offset/);
+
+    const past = makeHarness({ env: ENV, cwd: dir, fetch: harness.fetch });
+    expect(await past.run(['posts', 'push', file, '--at', '2000-01-01T00:00:00Z'])).toBe(2);
+    expect(past.stderrText()).toMatch(/future/);
+
+    expect(harness.calls).toHaveLength(0);
+  });
+
+  it('posts publish --at sends an at body', async () => {
+    const harness = makeFetch(() =>
+      response(200, serverPost({ status: 'scheduled', published_at: FUTURE })),
+    );
+    const h = makeHarness({ env: ENV, fetch: harness.fetch });
+    expect(await h.run(['posts', 'publish', POST_ID, '--at', FUTURE, '--json'])).toBe(0);
+    expect(harness.calls[0]?.url).toBe(
+      `https://site.example/api/v1/posts/${POST_ID}/publish`,
+    );
+    expect(bodyOf(harness.calls[0]?.init)).toEqual({ at: FUTURE });
+  });
+
+  it('posts publish without --at sends no body', async () => {
+    const harness = makeFetch(() =>
+      response(200, serverPost({ status: 'published', published_at: UPDATED })),
+    );
+    const h = makeHarness({ env: ENV, fetch: harness.fetch });
+    expect(await h.run(['posts', 'publish', POST_ID])).toBe(0);
+    expect(harness.calls[0]?.init?.body).toBeUndefined();
+  });
+
+  it('posts list shows scheduled posts with their date', async () => {
+    const harness = makeFetch(() =>
+      response(200, {
+        items: [serverPost({ status: 'scheduled', published_at: FUTURE })],
+        total: 1,
+      }),
+    );
+    const h = makeHarness({ env: ENV, fetch: harness.fetch });
+    expect(await h.run(['posts', 'list'])).toBe(0);
+    expect(h.stdoutText()).toContain(`scheduled ${FUTURE}`);
+  });
+});

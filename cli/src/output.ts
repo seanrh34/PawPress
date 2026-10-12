@@ -20,6 +20,23 @@ export interface OutputOptions {
   stderr: (text: string) => void;
 }
 
+/**
+ * Removes ASCII control characters (except tab and newline) from text that
+ * originated on the server (holder labels, error messages, titles) before it is
+ * written to a human terminal, so a crafted value can't emit escape sequences.
+ * JSON output is left untouched (JSON.stringify already escapes it).
+ */
+export function stripControlChars(value: string): string {
+  let out = '';
+  for (const char of value) {
+    const code = char.codePointAt(0) ?? 0;
+    if (code === 0x09 || code === 0x0a || (code >= 0x20 && code !== 0x7f)) {
+      out += char;
+    }
+  }
+  return out;
+}
+
 export function createOutput(options: OutputOptions): Output {
   const { json, stdout, stderr } = options;
 
@@ -29,13 +46,13 @@ export function createOutput(options: OutputOptions): Output {
       stdout(`${JSON.stringify(value)}\n`);
     },
     line(text = '') {
-      stdout(`${text}\n`);
+      stdout(`${stripControlChars(text)}\n`);
     },
     raw(text) {
       stdout(text);
     },
     note(text) {
-      stderr(`${text}\n`);
+      stderr(`${stripControlChars(text)}\n`);
     },
     error(payload) {
       if (json) {
@@ -45,13 +62,19 @@ export function createOutput(options: OutputOptions): Output {
         stderr(`${JSON.stringify({ error })}\n`);
         return;
       }
-      stderr(`error: ${payload.message}\n`);
+      stderr(`error: ${stripControlChars(payload.message)}\n`);
       for (const [field, messages] of validationFields(payload.details)) {
-        stderr(`  ${field}: ${messages.join(', ')}\n`);
+        stderr(
+          `  ${stripControlChars(field)}: ${messages
+            .map(stripControlChars)
+            .join(', ')}\n`,
+        );
       }
     },
     table(headers, rows) {
-      stdout(`${formatTable(headers, rows)}\n`);
+      const safeHeaders = headers.map(stripControlChars);
+      const safeRows = rows.map((row) => row.map(stripControlChars));
+      stdout(`${formatTable(safeHeaders, safeRows)}\n`);
     },
   };
 }

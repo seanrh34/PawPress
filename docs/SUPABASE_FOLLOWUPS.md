@@ -5,6 +5,18 @@ policy edits, or Auth settings). This is the checklist of database-side work for
 rough priority order. Items marked **security** are worth doing before giving tokens to agents on a
 public site.
 
+> **Live state of the `34cats-blog` project (updated 2026-10-12):**
+> - `posts`: writes and the authenticated read are admin-only; public reads only see posts whose
+>   `published_at` has passed (migration 20261012000100).
+> - `categories`: writes are admin-only (migration 20261012000200, **applied**). Public reads unchanged.
+> - `storage.objects`: the anonymous "Allow public uploads" policy was **dropped** (migration
+>   20261012000300, applied after PR #4 moved every upload server-side). Only "Allow public reads"
+>   remains; the server uploads with the service-role key after an admin check.
+> - Edit locks: migration 20261012000000 **applied**.
+>
+> Items (a)-(c) below were written from the README's setup SQL. On this project, (b) and (c) are done;
+> (a) (disabling public sign-ups) is still recommended as defence in depth.
+
 ## (a) Disable public sign-ups, or make RLS role-aware — security
 
 Current RLS policies grant write access to **any** `authenticated` user:
@@ -26,7 +38,7 @@ Replace the `auth.role() = 'authenticated'` write policies with ones that requir
 e.g. a `SECURITY DEFINER` helper `is_admin()` that checks
 `exists (select 1 from user_profiles where id = auth.uid() and role in ('master','admin'))`, and
 use it in the `posts`, `categories`, and `storage.objects` write policies. Keep the public read
-policies (`published_at IS NOT NULL` for posts).
+policies (see (i) for the scheduled-posts fix).
 
 Note: token-authenticated `/api/v1` requests use the service-role client and bypass RLS by design;
 the app enforces scopes and the owner's role on every request (`lib/auth/context.ts`,
@@ -108,3 +120,34 @@ the host's edge config), e.g. `default-src 'self'`, `img-src 'self' https: data:
 `unsafe-inline` for scripts. Note Next.js’s own runtime may need nonces/`'unsafe-inline'` for styles
 and inline bootstrap scripts, so start in report-only mode and tune before enforcing. This has **not**
 been added yet.
+
+## (i) Apply the scheduling and edit-lock migrations
+
+**Status on `34cats-blog`: both applied on 2026-10-12** (via `supabase db query`, each in a
+transaction; the project doesn't use CLI migration tracking). On that project the public read policy
+was named "Public users can view published posts"; the migration handles both known names.
+
+Two migrations ship with the app but are **not** applied automatically. Apply them in the Supabase SQL
+editor (or `supabase db push`):
+
+1. **`supabase/migrations/20261012000100_hide_scheduled_posts.sql` — security, apply BEFORE using
+   scheduling.** Until it is applied the anon RLS read policy on `posts` (`published_at IS NOT NULL`)
+   treats a **scheduled** post (`published_at` in the future) as public, so its full row — including
+   `content_html` and `content_lexical` — is readable by anyone querying Supabase's REST API directly
+   with the public anon key. The migration changes the policy to
+   `published_at is not null and published_at <= now()`; `now()` is evaluated per query, so a scheduled
+   post becomes readable the moment it goes live. The service-role client used by `/api/v1` bypasses
+   RLS and is unaffected.
+2. **`supabase/migrations/20261012000000_post_edit_locks.sql` — apply to enable edit locks.** Until it
+   is applied, lock endpoints report `locking: "unavailable"` and only `if_updated_at` protects
+   against conflicting edits. The migration adds the `post_edit_locks` table plus the
+   `acquire_post_edit_lock` and `get_post_edit_lock` RPCs (the 5-lock cap per agent user and a
+   DB-clock expiry check live in the RPCs).
+
+### Known limitation: the web editor's "Overwrite" bypasses conflicts
+
+When a save conflicts, the web editor offers **"Overwrite their changes"**. Choosing it deliberately
+skips sending `if_updated_at`, so the human's save wins over a concurrent agent edit without further
+conflict detection (the edit lock is still re-checked first). This is intentional — a logged-in admin
+can always force their change — but means the last-writer-wins path is available to humans only, not
+agents.

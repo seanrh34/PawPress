@@ -5,6 +5,7 @@ import { processAndUploadImages } from '@/lib/uploadImages';
 import { getUser } from '@/lib/auth';
 import { ApiError, toLegacyResponse } from '@/lib/cms/errors';
 import { createPost } from '@/lib/cms/postService';
+import { parseStrictIsoTimestamp } from '@/lib/cms/timestamp';
 
 // GET all posts
 export async function GET() {
@@ -13,13 +14,20 @@ export async function GET() {
     const user = await getUser();
 
     // Authenticated users (admins) can see all posts including drafts; the
-    // anonymous client only sees published posts (enforced by RLS).
+    // anonymous client only sees posts that are already live (never scheduled
+    // posts, whose content RLS still exposes).
     const db = user ? await getAuthenticatedSupabaseClient() : supabase;
 
-    const { data, error } = await db
+    let query = db
       .from('posts')
       .select('*')
       .order('created_at', { ascending: false });
+
+    if (!user) {
+      query = query.lte('published_at', new Date().toISOString());
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw ApiError.internal(error.message);
@@ -46,6 +54,18 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     let { content_lexical } = body;
+
+    // A future published_at schedules the post; anything present must be a
+    // strict ISO-8601 timestamp with an offset (the editor sends toISOString()).
+    if (
+      body.published_at !== undefined &&
+      body.published_at !== null &&
+      parseStrictIsoTimestamp(body.published_at) === null
+    ) {
+      throw ApiError.validation(
+        'published_at must be a valid ISO-8601 timestamp with an explicit offset or Z',
+      );
+    }
 
     // Process base64 images: upload to Supabase and replace with permanent URLs
     if (content_lexical) {

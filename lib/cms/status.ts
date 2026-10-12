@@ -1,0 +1,42 @@
+/**
+ * `published_at` is the single source of truth for a post's lifecycle:
+ *
+ * - `null`            -> draft (hidden)
+ * - in the future     -> scheduled (hidden until then)
+ * - now or in the past -> published (live)
+ *
+ * There is no stored `status` column and no cron job: every reader derives the
+ * status from `published_at` and filters out future rows.
+ */
+export type PostStatus = 'draft' | 'scheduled' | 'published';
+
+export function postStatus(
+  published_at: unknown,
+  now: Date = new Date(),
+): PostStatus {
+  // Fail closed: anything that is not a parseable timestamp (including null,
+  // undefined and non-strings) is treated as a draft, never as live content.
+  if (typeof published_at !== 'string' || published_at === '') {
+    return 'draft';
+  }
+  const ts = Date.parse(published_at);
+  if (Number.isNaN(ts)) {
+    return 'draft';
+  }
+  if (ts <= now.getTime()) {
+    return 'published';
+  }
+  return 'scheduled';
+}
+
+/**
+ * True when a post is visible to anonymous visitors: it has a `published_at`
+ * that is not in the future. Drafts (null) and scheduled (future) posts are
+ * hidden until they go live.
+ */
+export function isPubliclyVisible(
+  post: { published_at?: unknown },
+  now: Date = new Date(),
+): boolean {
+  return postStatus(post.published_at, now) === 'published';
+}

@@ -49,14 +49,16 @@ Tokens and header values are never printed; they are redacted from all output.
 pawpress auth login --url <site>          # token read from stdin
 pawpress auth status | auth logout
 
-pawpress posts list [--status ...] [--category <slug>] [--search <q>] [--limit N] [--offset N]
+pawpress posts list [--status draft|scheduled|published|all] [--category <slug>] [--search <q>] [--limit N] [--offset N]
 pawpress posts get <id|slug> [--format markdown|lexical|html] [-o file]
-pawpress posts pull <id|slug> [-o file.md]
-pawpress posts push <file.md> [--publish] [--dry-run] [--force] [--write-back]
-pawpress posts create --title T --category C [--slug S] [--excerpt E] (--file f.md | --stdin) [--publish] [--dry-run]
+pawpress posts pull <id|slug> [-o file.md] [--lock-ttl <s>] [--no-lock]
+pawpress posts push <file.md> [--publish] [--at <ISO>] [--dry-run] [--force] [--write-back] [--keep-lock]
+pawpress posts create --title T --category C [--slug S] [--excerpt E] (--file f.md | --stdin) [--publish] [--at <ISO>] [--dry-run]
 pawpress posts update <id> [--title T] [--slug S] [--excerpt E] [--category C] [--featured-image URL] [--file f.md | --stdin] [--if-updated-at ts] [--dry-run]
-pawpress posts publish <id> | posts unpublish <id>
+pawpress posts publish <id> [--at <ISO>] | posts unpublish <id>
 pawpress posts delete <id> --yes [--dry-run]
+pawpress posts lock <id|slug> [--ttl <s>] [--session <uuid>]
+pawpress posts unlock <id> --session <uuid>
 
 pawpress categories list
 pawpress categories create --name N --slug S --description D [--dry-run]
@@ -70,12 +72,32 @@ Global flags: `--json`, `--url <site>`, `--token <token>`, `-h/--help`, `--versi
 `--json` (or `PAWPRESS_OUTPUT=json`) prints exactly one JSON document to stdout.
 
 Push reads YAML front matter (`id`, `title`, `slug`, `category`, `excerpt`,
-`featured_image`, `status`, `updated_at`) followed by Markdown. Only **relative**
-image paths (`img/x.png`, `./x.png`, `../x.png`) are uploaded automatically and
-their references rewritten; site-relative (`/...`), protocol-relative, `data:`
-and remote URLs are left untouched. The same rule applies to a local
-`featured_image`. Updating sends `if_updated_at` from the front matter unless
-`--force` is given.
+`featured_image`, `status`, `publish_at`, `updated_at`, plus the read-only
+`lock_session` / `lock_expires_at`) followed by Markdown. Only
+**relative** image paths (`img/x.png`, `./x.png`, `../x.png`) are uploaded
+automatically and their references rewritten; site-relative (`/...`),
+protocol-relative, `data:` and remote URLs are left untouched. The same rule
+applies to a local `featured_image`. Updating sends `if_updated_at` from the
+front matter unless `--force` is given.
+
+## Edit locks
+
+`posts pull` acquires an edit lock by default and records `lock_session` and
+`lock_expires_at` in the front matter. `posts push` sends that session, renewing
+the lease first if it expired, and releases the lock on success unless
+`--keep-lock` is given. If a human or another agent holds the lock, `pull` exits
+5 with `not editing: <message>` naming them, and `push` exits 5 with
+`failed to apply edits: <message>` while leaving your file untouched. Use
+`posts lock` / `posts unlock` to acquire, renew, or release a lock manually.
+Locking requires the `post_edit_locks` migration; without it the CLI notes that
+and falls back to `updated_at` conflict detection.
+
+`status` is `draft | scheduled | published`. For `status: scheduled` the front
+matter must also carry `publish_at` (an ISO-8601 time with an explicit offset or
+`Z`, in the future). `--at <ISO>` on `push`/`create` schedules without editing
+the front matter, and `posts publish <id> --at <ISO>` reschedules; both require
+the `posts:publish` scope. `--publish` still means "publish now" and cannot be
+combined with `--at`.
 
 Ids that the API treats as UUIDs (post `id` in front matter and the positional
 ids of `posts update|publish|unpublish|delete` and `categories update|delete`)
@@ -90,6 +112,6 @@ are validated locally; a non-UUID name exits `2` before any request.
 | 2 | usage error (bad args, missing `--yes`, local file problems) |
 | 3 | authentication/authorization (401/403) |
 | 4 | not found (404) |
-| 5 | conflict (409, e.g. `if_updated_at` mismatch or taken slug) |
+| 5 | conflict (409, e.g. `if_updated_at` mismatch, taken slug, or `locked` — someone else is editing) |
 | 6 | validation (400/413/415) |
 | 7 | network error (no HTTP response) |

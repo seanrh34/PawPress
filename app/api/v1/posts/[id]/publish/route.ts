@@ -1,21 +1,61 @@
 import { NextResponse } from 'next/server';
 import { audit, withApi } from '@/lib/api/withApi';
+import { lockSessionFromHeader } from '@/lib/api/lockSession';
 import { ApiError } from '@/lib/cms/errors';
 import { isUuid } from '@/lib/cms/categoryService';
-import { publishPost } from '@/lib/cms/postService';
-import { ensurePostCategory, toPostResource } from '@/lib/cms/v1';
+import { assertNoForeignLock } from '@/lib/cms/lockService';
+import { getPostById, publishPost } from '@/lib/cms/postService';
+import {
+  ensurePostCategory,
+  parsePublishAt,
+  publishPostBodySchema,
+  toPostResource,
+} from '@/lib/cms/v1';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export const POST = withApi<{ id: string }>(
-  async (_req, ctx) => {
+  async (req, ctx) => {
     const id = ctx.params.id;
     if (!isUuid(id)) {
       throw ApiError.notFound('Post not found');
     }
 
-    const published = await publishPost(ctx.auth.db, id);
+    // The body is optional: no body (or an empty one) publishes now.
+    const raw = await req.text();
+    let at: Date | undefined;
+    if (raw.trim() !== '') {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw ApiError.validation('Invalid JSON body');
+      }
+      const body = publishPostBodySchema.parse(parsed);
+      if (body.at !== undefined) {
+        at = parsePublishAt(body.at, 'at');
+      }
+    }
+
+    const current = await getPostById(ctx.auth.db, id);
+    if (!current) {
+      throw ApiError.notFound('Post not found');
+    }
+
+    await assertNoForeignLock(
+      ctx.auth.db,
+      id,
+      lockSessionFromHeader(req),
+      ctx.auth.userId,
+    );
+
+    // Bind the write to the revision the lock/authorization decision was made
+    // against, so a concurrent edit is a conflict rather than a silent overwrite.
+    const published = await publishPost(ctx.auth.db, id, {
+      ...(at ? { at } : {}),
+      ifUpdatedAt: current.updated_at,
+    });
     const post = await ensurePostCategory(ctx.auth.db, published);
     audit(ctx, 'post.publish', 'post', post.id);
 

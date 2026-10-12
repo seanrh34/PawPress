@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
 import { audit, withApi } from '@/lib/api/withApi';
+import { lockSessionFromHeader } from '@/lib/api/lockSession';
 import { ApiError } from '@/lib/cms/errors';
 import { isUuid } from '@/lib/cms/categoryService';
+import {
+  assertNoForeignLock,
+  getLockState,
+  toPublicLock,
+} from '@/lib/cms/lockService';
 import {
   assertScope,
   requiredScopesForPostUpdate,
@@ -20,6 +26,7 @@ import {
   getPostQuerySchema,
   resolveCategoryOrThrow,
   resolveLexicalContent,
+  resolveUpdatePublishedAt,
   toPostResource,
   updatePostBodySchema,
 } from '@/lib/cms/v1';
@@ -39,10 +46,15 @@ export const GET = withApi<{ id: string }>(
       throw ApiError.notFound('Post not found');
     }
 
+    const lockState = await getLockState(ctx.auth.db, post.id);
+    const viewerSession = lockSessionFromHeader(req);
+
     return NextResponse.json({
       ...toPostResource(post),
       content: contentForPost(post, format),
       content_format: format,
+      edit_lock: toPublicLock(lockState.lock, viewerSession),
+      locking: lockState.locking,
     });
   },
   { auth: 'token', scope: 'posts:read' },
@@ -64,6 +76,7 @@ export const PATCH = withApi<{ id: string }>(
 
     for (const scope of requiredScopesForPostUpdate(current, {
       status: body.status,
+      hasPublishAt: body.publish_at !== undefined,
     })) {
       assertScope(ctx.auth, scope);
     }
@@ -91,11 +104,18 @@ export const PATCH = withApi<{ id: string }>(
       patch.content_lexical = resolveLexicalContent(body);
     }
 
-    if (body.status === 'published') {
-      patch.published_at = current.published_at ?? new Date().toISOString();
-    } else if (body.status === 'draft') {
-      patch.published_at = null;
+    const publishedAt = resolveUpdatePublishedAt(body, current);
+    if (publishedAt !== undefined) {
+      patch.published_at = publishedAt;
     }
+
+    // Edit locks apply after auth/scope/validation but before any write.
+    await assertNoForeignLock(
+      ctx.auth.db,
+      id,
+      lockSessionFromHeader(req),
+      ctx.auth.userId,
+    );
 
     // Always write against the version the scope decision above was made on,
     // so a post published concurrently can't be edited with only posts:write.
@@ -112,13 +132,27 @@ export const PATCH = withApi<{ id: string }>(
 );
 
 export const DELETE = withApi<{ id: string }>(
-  async (_req, ctx) => {
+  async (req, ctx) => {
     const id = ctx.params.id;
     if (!isUuid(id)) {
       throw ApiError.notFound('Post not found');
     }
 
-    await deletePost(ctx.auth.db, id);
+    const current = await getPostById(ctx.auth.db, id);
+    if (!current) {
+      throw ApiError.notFound('Post not found');
+    }
+
+    await assertNoForeignLock(
+      ctx.auth.db,
+      id,
+      lockSessionFromHeader(req),
+      ctx.auth.userId,
+    );
+
+    // Bind the delete to the revision we just checked, so a concurrent edit
+    // between the check and the delete becomes a conflict.
+    await deletePost(ctx.auth.db, id, { ifUpdatedAt: current.updated_at });
     audit(ctx, 'post.delete', 'post', id);
 
     return NextResponse.json({ deleted: true, id });

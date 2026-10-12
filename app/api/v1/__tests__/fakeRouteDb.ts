@@ -12,6 +12,11 @@ export interface RecordedCall {
   args: unknown[];
 }
 
+export interface RecordedRpcCall {
+  fn: string;
+  args: Record<string, unknown>;
+}
+
 export interface RecordedUpload {
   bucket: string;
   path: string;
@@ -29,9 +34,11 @@ export interface RouteDb {
   users: Map<string, FakeUser>;
   calls: RecordedCall[];
   uploads: RecordedUpload[];
+  rpcCalls: RecordedRpcCall[];
   role: unknown;
   hasProfile: boolean;
   enqueue(table: string, ...results: FakeResult[]): void;
+  enqueueRpc(fn: string, ...results: FakeResult[]): void;
   setUploadResult(result: FakeResult): void;
   callsFor(table: string, method: string): RecordedCall[];
 }
@@ -45,6 +52,10 @@ interface FakeQuery extends PromiseLike<FakeResult> {
   is(...args: unknown[]): FakeQuery;
   not(...args: unknown[]): FakeQuery;
   ilike(...args: unknown[]): FakeQuery;
+  gt(...args: unknown[]): FakeQuery;
+  gte(...args: unknown[]): FakeQuery;
+  lt(...args: unknown[]): FakeQuery;
+  lte(...args: unknown[]): FakeQuery;
   order(...args: unknown[]): FakeQuery;
   range(...args: unknown[]): FakeQuery;
   limit(...args: unknown[]): FakeQuery;
@@ -71,6 +82,8 @@ export function makeRouteDb(): RouteDb {
   const calls: RecordedCall[] = [];
   const uploads: RecordedUpload[] = [];
   const users = new Map<string, FakeUser>();
+  const rpcQueues = new Map<string, FakeResult[]>();
+  const rpcCalls: RecordedRpcCall[] = [];
   let uploadResult: FakeResult = {
     data: { path: 'generated.png' },
     error: null,
@@ -78,6 +91,14 @@ export function makeRouteDb(): RouteDb {
 
   function take(table: string): FakeResult {
     const list = queues.get(table);
+    if (list && list.length > 0) {
+      return list.shift() as FakeResult;
+    }
+    return { data: null, error: null };
+  }
+
+  function takeRpc(fn: string): FakeResult {
+    const list = rpcQueues.get(fn);
     if (list && list.length > 0) {
       return list.shift() as FakeResult;
     }
@@ -116,6 +137,22 @@ export function makeRouteDb(): RouteDb {
       },
       ilike(...args) {
         calls.push({ table, method: 'ilike', args });
+        return chain;
+      },
+      gt(...args) {
+        calls.push({ table, method: 'gt', args });
+        return chain;
+      },
+      gte(...args) {
+        calls.push({ table, method: 'gte', args });
+        return chain;
+      },
+      lt(...args) {
+        calls.push({ table, method: 'lt', args });
+        return chain;
+      },
+      lte(...args) {
+        calls.push({ table, method: 'lte', args });
         return chain;
       },
       order(...args) {
@@ -182,6 +219,22 @@ export function makeRouteDb(): RouteDb {
       },
       ilike(...args) {
         calls.push({ table: 'user_profiles', method: 'ilike', args });
+        return chain;
+      },
+      gt(...args) {
+        calls.push({ table: 'user_profiles', method: 'gt', args });
+        return chain;
+      },
+      gte(...args) {
+        calls.push({ table: 'user_profiles', method: 'gte', args });
+        return chain;
+      },
+      lt(...args) {
+        calls.push({ table: 'user_profiles', method: 'lt', args });
+        return chain;
+      },
+      lte(...args) {
+        calls.push({ table: 'user_profiles', method: 'lte', args });
         return chain;
       },
       order(...args) {
@@ -263,6 +316,10 @@ export function makeRouteDb(): RouteDb {
     from(table: string): FakeQuery {
       return table === 'user_profiles' ? profileChain() : makeChain(table);
     },
+    rpc(fn: string, args: Record<string, unknown> = {}) {
+      rpcCalls.push({ fn, args });
+      return Promise.resolve(takeRpc(fn));
+    },
     storage: {
       from(bucket: string) {
         return {
@@ -285,12 +342,18 @@ export function makeRouteDb(): RouteDb {
     users,
     calls,
     uploads,
+    rpcCalls,
     role: 'admin' as unknown,
     hasProfile: true,
     enqueue(table: string, ...results: FakeResult[]) {
       const list = queues.get(table) ?? [];
       list.push(...results);
       queues.set(table, list);
+    },
+    enqueueRpc(fn: string, ...results: FakeResult[]) {
+      const list = rpcQueues.get(fn) ?? [];
+      list.push(...results);
+      rpcQueues.set(fn, list);
     },
     setUploadResult(result: FakeResult) {
       uploadResult = result;

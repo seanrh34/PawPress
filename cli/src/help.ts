@@ -44,10 +44,10 @@ The token itself is never printed.`,
   'auth logout': `Usage: pawpress auth logout
 
 Removes the saved token from the config file.`,
-  posts: `Usage: pawpress posts <list|get|pull|push|create|update|publish|unpublish|delete> [options]`,
+  posts: `Usage: pawpress posts <list|get|pull|push|create|update|publish|unpublish|delete|lock|unlock> [options]`,
   'posts list': `Usage: pawpress posts list [options]
 
-  --status draft|published|all   Filter by status (default all)
+  --status draft|scheduled|published|all   Filter by status (default all)
   --category <slug>              Filter by category slug
   --search <q>                   Substring match on title
   --limit <n>                    Page size (1-100, default 20)
@@ -55,30 +55,63 @@ Removes the saved token from the config file.`,
   'posts get': `Usage: pawpress posts get <id|slug> [options]
 
   --format markdown|lexical|html   Content format (default markdown)
-  -o, --output <file>              Write the content to a file`,
-  'posts pull': `Usage: pawpress posts pull <id|slug> [-o <file.md>]
+  -o, --output <file>              Write the content to a file
+
+Prints the edit lock (who is editing), when present.`,
+  'posts pull': `Usage: pawpress posts pull <id|slug> [-o <file.md>] [--lock-ttl <s>] [--no-lock]
 
 Writes the post as Markdown with YAML front matter (id, title, slug, category,
-excerpt, featured_image, status, updated_at). Prints to stdout when -o is omitted.`,
+excerpt, featured_image, status, updated_at) and acquires an edit lock by
+default, recording lock_session and lock_expires_at in the front matter.
+
+  --lock-ttl <seconds>   Agent lease length (60-3600, default 900)
+  --no-lock              Do not acquire an edit lock
+
+If a human or another agent is editing, exits 5 with "not editing: <message>"
+naming them and writes nothing. On a site without the post_edit_locks migration
+it prints a note and continues relying on updated_at conflict detection.`,
   'posts push': `Usage: pawpress posts push <file.md> [options]
 
 Creates a post when the front matter has no id, otherwise updates it.
-  --publish      Publish the post
+  --publish      Publish the post now
+  --at <ISO>     Schedule the post for an ISO-8601 time with an explicit offset
+                 or Z (e.g. 2026-10-20T09:00:00+08:00); cannot be combined with
+                 --publish or a non-scheduled front matter status
   --dry-run      Show the request without sending it
   --force        Skip the updated_at concurrency check on update
   --write-back   Rewrite the file with the returned id/updated_at and image URLs
+  --keep-lock    Do not release the edit lock after a successful update
   --allow-outside-dir  Allow local images outside the markdown file's directory
 
-Update sends "status" only when --publish is given or the front matter has a
-status field. Without --write-back the local updated_at becomes stale.
+When the front matter has lock_session, push sends it (renewing an expired lease
+first) and releases it on success unless --keep-lock. A foreign lock exits 5 with
+"failed to apply edits: ...". Update sends "status" only when --publish/--at is
+given or the front matter has a status field. Without --write-back the local
+updated_at becomes stale.
 
 Only relative image paths (e.g. img/x.png, ./x.png) are uploaded; site-relative
 (/...) and remote (http/data) references are left untouched. Uploaded files must
 be regular (non-symlink) files under the markdown file's directory and at most
 4 MB; pass --allow-outside-dir to permit paths that escape that directory.`,
+  'posts lock': `Usage: pawpress posts lock <id|slug> [--ttl <seconds>] [--session <uuid>]
+
+Acquires an edit lock (or renews your own with --session). Prints the session id
+and expiry; --json returns the lock object. A foreign lock exits 5 with
+"not editing: <message>". Locking needs the post_edit_locks migration; without
+it the command notes that and exits 0.
+
+  --ttl <seconds>     Lease length (60-3600, default 900)
+  --session <uuid>    Renew this existing session instead of starting a new one`,
+  'posts unlock': `Usage: pawpress posts unlock <id> --session <uuid>
+
+Releases the lock held by --session (no-op if it is not yours).`,
   'posts create': `Usage: pawpress posts create --title T --category C [--slug S] [--excerpt E]
-                                  (--file f.md | --stdin) [--publish] [--dry-run]
-                                  [--allow-outside-dir]
+                                  (--file f.md | --stdin) [--publish] [--at <ISO>]
+                                  [--dry-run] [--allow-outside-dir]
+
+  --publish   Publish now
+  --at <ISO>  Schedule for an ISO-8601 time with an explicit offset or Z
+              (e.g. 2026-10-20T09:00:00+08:00); cannot be combined with --publish
 
 Only relative image paths (e.g. img/x.png, ./x.png) are uploaded; site-relative
 (/...) and remote (http/data) references are left untouched. Uploaded files must
@@ -94,8 +127,15 @@ be regular (non-symlink) files under the markdown file's directory and at most
 
 Uploaded images must be regular (non-symlink) files under the markdown file's
 directory and at most 4 MB unless --allow-outside-dir is passed.`,
-  'posts publish': `Usage: pawpress posts publish <id>`,
-  'posts unpublish': `Usage: pawpress posts unpublish <id>`,
+  'posts publish': `Usage: pawpress posts publish <id> [--at <ISO>]
+
+Without --at the post goes live now (a draft or scheduled post is published; an
+already published post keeps its date). With --at (an ISO-8601 time with an
+explicit offset or Z, in the future) the post is (re)scheduled. Scheduling needs
+the posts:publish scope.`,
+  'posts unpublish': `Usage: pawpress posts unpublish <id>
+
+Clears published_at, which also cancels a schedule.`,
   'posts delete': `Usage: pawpress posts delete <id> --yes [--dry-run]
 
 Requires --yes (there is no interactive prompt).`,

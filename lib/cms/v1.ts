@@ -13,6 +13,8 @@ import {
 import { markdownToLexical, lexicalToMarkdown, findDisallowedNodeTypes, normalizeLexicalState, MarkdownBlockTooLongError } from './markdown';
 import { ApiError } from './errors';
 import { getPostById, type PostCategory, type PostRow } from './postService';
+import { postStatus, type PostStatus } from './status';
+import { parseStrictIsoTimestamp } from './timestamp';
 import { MAX_SLUG_LENGTH } from './slug';
 
 /**
@@ -23,6 +25,8 @@ import { MAX_SLUG_LENGTH } from './slug';
 
 export const MAX_MARKDOWN_CHARS = 200_000;
 export const MAX_LEXICAL_BYTES = 2 * 1024 * 1024;
+
+const MAX_SCHEDULE_MS = 365 * 24 * 60 * 60 * 1000;
 
 export interface CategoryResource {
   id: string;
@@ -38,7 +42,7 @@ export interface PostResource {
   title: string;
   slug: string;
   excerpt: string;
-  status: 'draft' | 'published';
+  status: PostStatus;
   published_at: string | null;
   category: PostCategory | null;
   featured_image_url: string | null;
@@ -54,7 +58,7 @@ export function toPostResource(row: PostRow): PostResource {
     title: row.title,
     slug: row.slug,
     excerpt: row.excerpt,
-    status: row.published_at !== null ? 'published' : 'draft',
+    status: postStatus(row.published_at),
     published_at: row.published_at,
     category: row.category ?? null,
     featured_image_url: row.featured_image_url,
@@ -123,11 +127,11 @@ const contentMarkdownSchema = z
 
 const contentLexicalSchema = z.unknown();
 
-const postStatusSchema = z.enum(['draft', 'published']);
+const postStatusSchema = z.enum(['draft', 'published', 'scheduled']);
 
 export const listPostsQuerySchema = z
   .object({
-    status: z.enum(['draft', 'published', 'all']).default('all'),
+    status: z.enum(['draft', 'published', 'scheduled', 'all']).default('all'),
     category: z.string().min(1).optional(),
     q: z.string().optional(),
     limit: z.coerce.number().int().min(1).max(100).default(20),
@@ -151,6 +155,7 @@ export const createPostBodySchema = z
     content_markdown: contentMarkdownSchema.optional(),
     content_lexical: contentLexicalSchema.optional(),
     status: postStatusSchema.optional(),
+    publish_at: z.string().optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -165,6 +170,22 @@ export const createPostBodySchema = z
           'Provide exactly one of content_markdown or content_lexical',
       });
     }
+
+    if (value.status === 'scheduled' && value.publish_at === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['publish_at'],
+        message: 'publish_at is required when status is "scheduled"',
+      });
+    }
+
+    if (value.publish_at !== undefined && value.status !== 'scheduled') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['publish_at'],
+        message: 'publish_at is only allowed when status is "scheduled"',
+      });
+    }
   });
 
 export const updatePostBodySchema = z
@@ -177,6 +198,7 @@ export const updatePostBodySchema = z
     content_markdown: contentMarkdownSchema.optional(),
     content_lexical: contentLexicalSchema.optional(),
     status: postStatusSchema.optional(),
+    publish_at: z.string().optional(),
     if_updated_at: z.string().optional(),
   })
   .strict()
@@ -201,7 +223,8 @@ export const updatePostBodySchema = z
       value.featured_image_url !== undefined ||
       value.content_markdown !== undefined ||
       value.content_lexical !== undefined ||
-      value.status !== undefined;
+      value.status !== undefined ||
+      value.publish_at !== undefined;
 
     if (!hasUpdatableField) {
       ctx.addIssue({
@@ -211,6 +234,12 @@ export const updatePostBodySchema = z
       });
     }
   });
+
+export const publishPostBodySchema = z
+  .object({
+    at: z.string().optional(),
+  })
+  .strict();
 
 export const createCategoryBodySchema = z
   .object({
@@ -403,4 +432,116 @@ export async function resolveCategoryOrThrow(
     });
   }
   return category;
+}
+
+function invalidPublishAt(field: string, message: string): ApiError {
+  return ApiError.validation(message, { fields: { [field]: [message] } });
+}
+
+/**
+ * Validates a `publish_at` / `at` value: an ISO-8601 timestamp with an explicit
+ * offset or `Z`, strictly in the future and at most 365 days ahead. `field`
+ * names the offending body key in the error details.
+ */
+export function parsePublishAt(
+  value: string,
+  field = 'publish_at',
+  now: Date = new Date(),
+): Date {
+  const formatMessage = `${field} must be a valid ISO-8601 timestamp with an explicit offset or Z (e.g. 2026-10-20T09:00:00+08:00)`;
+
+  if (typeof value !== 'string') {
+    throw invalidPublishAt(field, formatMessage);
+  }
+
+  const date = parseStrictIsoTimestamp(value);
+  if (date === null) {
+    throw invalidPublishAt(field, formatMessage);
+  }
+
+  const parsed = date.getTime();
+
+  if (parsed <= now.getTime()) {
+    throw invalidPublishAt(field, `${field} must be in the future`);
+  }
+
+  if (parsed > now.getTime() + MAX_SCHEDULE_MS) {
+    throw invalidPublishAt(
+      field,
+      `${field} must be at most 365 days in the future`,
+    );
+  }
+
+  return new Date(parsed);
+}
+
+/**
+ * Resolves the stored `published_at` for a create from its `status` and
+ * `publish_at`: `null` for a draft, now for published, and the parsed instant
+ * for scheduled.
+ */
+export function resolveCreatePublishedAt(
+  input: { status?: PostStatus; publish_at?: string },
+  now: Date = new Date(),
+): string | null {
+  if (input.status === 'published') {
+    return now.toISOString();
+  }
+  if (input.status === 'scheduled') {
+    if (input.publish_at === undefined) {
+      throw invalidPublishAt(
+        'publish_at',
+        'publish_at is required when status is "scheduled"',
+      );
+    }
+    return parsePublishAt(input.publish_at, 'publish_at', now).toISOString();
+  }
+  return null;
+}
+
+/**
+ * Resolves the `published_at` change for a PATCH. Returns `undefined` when the
+ * status is untouched, or `null` to clear it. A bare `publish_at` (without
+ * `status`) is only allowed to reschedule a post that is already scheduled.
+ */
+export function resolveUpdatePublishedAt(
+  input: { status?: PostStatus; publish_at?: string },
+  current: { published_at: string | null },
+  now: Date = new Date(),
+): string | null | undefined {
+  if (input.status === 'draft') {
+    return null;
+  }
+
+  if (input.status === 'published') {
+    if (current.published_at !== null) {
+      const ts = Date.parse(current.published_at);
+      if (!Number.isNaN(ts) && ts <= now.getTime()) {
+        return current.published_at;
+      }
+    }
+    return now.toISOString();
+  }
+
+  if (input.status === 'scheduled') {
+    if (input.publish_at === undefined) {
+      throw invalidPublishAt(
+        'publish_at',
+        'publish_at is required when status is "scheduled"',
+      );
+    }
+    return parsePublishAt(input.publish_at, 'publish_at', now).toISOString();
+  }
+
+  if (input.publish_at !== undefined) {
+    if (postStatus(current.published_at, now) !== 'scheduled') {
+      throw invalidPublishAt(
+        'publish_at',
+        'publish_at can only be used without status on a scheduled post; set status to "scheduled"',
+      );
+    }
+    return parsePublishAt(input.publish_at, 'publish_at', now).toISOString();
+  }
+
+  return undefined;
 }
