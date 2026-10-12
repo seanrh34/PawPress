@@ -7,11 +7,30 @@ import Editor from '@/components/Editor';
 import FeaturedImageUpload from '@/components/FeaturedImageUpload';
 import { SerializedEditorState } from 'lexical';
 import { Post, Category } from '@/lib/types';
+import { postStatus } from '@/lib/cms/status';
 import { supabase } from '@/lib/supabase';
 
 interface PostEditorProps {
   post?: Post;
   mode: 'create' | 'edit';
+}
+
+type PublishMode = 'draft' | 'now' | 'schedule';
+
+// A datetime-local value (`YYYY-MM-DDTHH:mm`) in the browser's time zone.
+function toLocalDateTimeInput(iso: string): string {
+  const date = new Date(iso);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function isFutureIso(iso: string | null | undefined): boolean {
+  return !!iso && new Date(iso).getTime() > Date.now();
+}
+
+function initialPublishMode(post?: Post): PublishMode {
+  if (!post?.published_at) return 'draft';
+  return isFutureIso(post.published_at) ? 'schedule' : 'now';
 }
 
 export default function PostEditor({ post, mode }: PostEditorProps) {
@@ -20,7 +39,9 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
   const [slug, setSlug] = useState(post?.slug || '');
   const [excerpt, setExcerpt] = useState(post?.excerpt || '');
   const [content, setContent] = useState<SerializedEditorState | null>(post?.content_lexical || null);
-  const [isPublished, setIsPublished] = useState(!!post?.published_at);
+  const [publishMode, setPublishMode] = useState<PublishMode>(() => initialPublishMode(post));
+  const [scheduleAt, setScheduleAt] = useState(() => (isFutureIso(post?.published_at) ? toLocalDateTimeInput(post!.published_at!) : ''));
+  const [timeZone, setTimeZone] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(post?.featured_image_url || null);
   const [featuredImageFile, setFeaturedImageFile] = useState<File>();
@@ -52,6 +73,12 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
 
     fetchCategories();
   }, [mode, categoryId]);
+
+  // Read the browser time zone after mount so the server-rendered markup
+  // doesn't mismatch the client.
+  useEffect(() => {
+    setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  }, []);
 
   // Auto-generate slug from title (only in create mode)
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -194,6 +221,17 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
       return;
     }
 
+    if (publishMode === 'schedule') {
+      if (!scheduleAt) {
+        alert('Please choose a date and time to schedule the post');
+        return;
+      }
+      if (new Date(scheduleAt).getTime() <= Date.now()) {
+        alert('The schedule time must be in the future');
+        return;
+      }
+    }
+
     setIsSaving(true);
 
     try {
@@ -208,6 +246,16 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
       const url = mode === 'create' ? '/api/posts' : `/api/posts/${post?.id}`;
       const method = mode === 'create' ? 'POST' : 'PUT';
 
+      const existingPublishedAt = post?.published_at ?? null;
+      const publishedAt =
+        publishMode === 'draft'
+          ? null
+          : publishMode === 'schedule'
+            ? new Date(scheduleAt).toISOString()
+            : existingPublishedAt && new Date(existingPublishedAt).getTime() <= Date.now()
+              ? existingPublishedAt
+              : new Date().toISOString();
+
       const response = await fetch(url, {
         method,
         headers: {
@@ -219,7 +267,7 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
           excerpt,
           content_lexical: content,
           featured_image_url: newFeaturedImageUrl,
-          published_at: isPublished ? (post?.published_at || new Date().toISOString()) : null,
+          published_at: publishedAt,
           category_id: categoryId,
         }),
       });
@@ -240,6 +288,19 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
       setIsSaving(false);
     }
   };
+
+  const currentStatus = postStatus(post?.published_at ?? null);
+  const submitLabel = isSaving
+    ? 'Saving...'
+    : publishMode === 'draft'
+      ? 'Save as Draft'
+      : publishMode === 'now'
+        ? currentStatus === 'published'
+          ? 'Update'
+          : 'Publish'
+        : currentStatus === 'scheduled'
+          ? 'Update'
+          : 'Schedule';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -355,18 +416,58 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
             />
           </div>
 
-          {/* Publish Toggle */}
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="isPublished"
-              checked={isPublished}
-              onChange={(e) => setIsPublished(e.target.checked)}
-              className="form-checkbox"
-            />
-            <label htmlFor="isPublished" className="form-label mb-0">
-              {mode === 'create' ? 'Publish immediately' : 'Published'}
-            </label>
+          {/* Publish / Schedule */}
+          <div className="space-y-2">
+            <span className="form-label">Publishing</span>
+            <div className="flex flex-wrap gap-6">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="publishMode"
+                  checked={publishMode === 'draft'}
+                  onChange={() => setPublishMode('draft')}
+                  className="form-checkbox"
+                />
+                Draft
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="publishMode"
+                  checked={publishMode === 'now'}
+                  onChange={() => setPublishMode('now')}
+                  className="form-checkbox"
+                />
+                Publish now
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="publishMode"
+                  checked={publishMode === 'schedule'}
+                  onChange={() => setPublishMode('schedule')}
+                  className="form-checkbox"
+                />
+                Schedule
+              </label>
+            </div>
+            {publishMode === 'schedule' && (
+              <div className="mt-2">
+                <input
+                  type="datetime-local"
+                  id="scheduleAt"
+                  value={scheduleAt}
+                  onChange={(e) => setScheduleAt(e.target.value)}
+                  className="form-input"
+                />
+                <p className="form-hint">
+                  {timeZone ? `Time zone: ${timeZone}. ` : ''}
+                  {scheduleAt
+                    ? `Goes live automatically at ${new Date(scheduleAt).toLocaleString()}.`
+                    : 'Goes live automatically at the chosen time.'}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Actions */}
@@ -377,7 +478,7 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
               disabled={isSaving}
               className="btn-primary"
             >
-              {isSaving ? 'Saving...' : mode === 'create' ? (isPublished ? 'Publish Post' : 'Save as Draft') : 'Update Post'}
+              {submitLabel}
             </button>
             <Link
               href="/admin"

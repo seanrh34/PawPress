@@ -18,14 +18,16 @@ export async function GET(
     const user = await getUser();
 
     // Authenticated users (admins) can see all posts including drafts; the
-    // anonymous client only sees published posts (enforced by RLS).
+    // anonymous client only sees posts that are already live (a scheduled post
+    // 404s until it goes live).
     const db = user ? await getAuthenticatedSupabaseClient() : supabase;
 
-    const { data, error } = await db
-      .from('posts')
-      .select('*')
-      .eq('id', id)
-      .single();
+    let query = db.from('posts').select('*').eq('id', id);
+    if (!user) {
+      query = query.lte('published_at', new Date().toISOString());
+    }
+
+    const { data, error } = await query.single();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 404 });
