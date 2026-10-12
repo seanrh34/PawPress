@@ -5,6 +5,19 @@ policy edits, or Auth settings). This is the checklist of database-side work for
 rough priority order. Items marked **security** are worth doing before giving tokens to agents on a
 public site.
 
+> **Live state of the `34cats-blog` project (checked 2026-10-12):**
+> - `posts`: writes and the authenticated read are already admin-only (`user_profiles.role in
+>   ('admin','master')`). The public read policy was updated by (i).
+> - `categories`: insert/update/delete are allowed for **any authenticated user** (`true`).
+> - `storage.objects`: **"Allow public uploads"**, an INSERT policy for the `public` role on bucket
+>   `post-images`. Anyone with the anon key (it's in the site's JavaScript) can upload arbitrary files
+>   without logging in. See (c): the web editor currently relies on this, because it uploads with the
+>   anon client.
+> - Migrations (i) are **applied** on this project (2026-10-12).
+>
+> The rest of (a)/(b) below was written from the README's setup SQL, which is more permissive than
+> the live `posts` policies.
+
 ## (a) Disable public sign-ups, or make RLS role-aware — security
 
 Current RLS policies grant write access to **any** `authenticated` user:
@@ -110,6 +123,10 @@ and inline bootstrap scripts, so start in report-only mode and tune before enfor
 been added yet.
 
 ## (i) Apply the scheduling and edit-lock migrations
+
+**Status on `34cats-blog`: both applied on 2026-10-12** (via `supabase db query`, each in a
+transaction; the project doesn't use CLI migration tracking). On that project the public read policy
+was named "Public users can view published posts"; the migration handles both known names.
 
 Two migrations ship with the app but are **not** applied automatically. Apply them in the Supabase SQL
 editor (or `supabase db push`):
