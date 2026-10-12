@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { optBool, optString, parseOptions } from '../args';
+import type { OptionSpec } from '../args';
 import { CliError, EXIT, usageError } from '../errors';
 import { assertUuid } from '../ids';
 import { parseFrontMatter, serializeFrontMatter } from '../frontmatter';
@@ -21,7 +22,32 @@ import {
 import type { PlanUpload } from './shared';
 
 const FORMATS: ContentFormat[] = ['markdown', 'lexical', 'html'];
-const STATUSES = ['draft', 'published', 'all'];
+const STATUSES = ['draft', 'scheduled', 'published', 'all'];
+
+const ISO_OFFSET_PATTERN =
+  /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})$/;
+
+/**
+ * Validates a `--at` / front matter `publish_at` locally: an ISO-8601
+ * timestamp with an explicit offset or `Z`, in the future. Bad values are
+ * usage errors (exit 2) so nothing is sent to the server.
+ */
+function assertFutureIso(value: string, label: string): string {
+  const format =
+    `${label} must be an ISO-8601 timestamp with an explicit offset or Z ` +
+    `(e.g. 2026-10-20T09:00:00+08:00)`;
+  if (!ISO_OFFSET_PATTERN.test(value)) {
+    throw usageError(format);
+  }
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    throw usageError(format);
+  }
+  if (parsed <= Date.now()) {
+    throw usageError(`${label} must be in the future`);
+  }
+  return value;
+}
 
 export async function postsCommand(ctx: Context, args: string[]): Promise<void> {
   const [sub, ...rest] = args;
@@ -66,7 +92,7 @@ async function postsList(ctx: Context, args: string[]): Promise<void> {
   );
   const status = optString(values, 'status');
   if (status && !STATUSES.includes(status)) {
-    throw usageError(`invalid --status: ${status} (expected draft, published or all)`);
+    throw usageError(`invalid --status: ${status} (expected draft, scheduled, published or all)`);
   }
   const limit = intOption(values, 'limit', { min: 1, max: 100 });
   const offset = intOption(values, 'offset', { min: 0 });
@@ -92,7 +118,9 @@ async function postsList(ctx: Context, args: string[]): Promise<void> {
     ['id', 'status', 'updated_at', 'slug', 'title'],
     result.items.map((post) => [
       post.id,
-      post.status,
+      post.status === 'scheduled' && post.published_at
+        ? `scheduled ${post.published_at}`
+        : post.status,
       post.updated_at,
       post.slug,
       truncate(post.title, 50),
@@ -173,6 +201,7 @@ async function postsPush(ctx: Context, args: string[]): Promise<void> {
     args,
     {
       publish: { type: 'boolean' },
+      at: { type: 'string' },
       'dry-run': { type: 'boolean' },
       force: { type: 'boolean' },
       'write-back': { type: 'boolean' },
@@ -182,6 +211,11 @@ async function postsPush(ctx: Context, args: string[]): Promise<void> {
   );
   const file = singleRef(positionals, 'posts push');
   const publish = optBool(values, 'publish');
+  const at = optString(values, 'at');
+  if (publish && at !== undefined) {
+    throw usageError('--at cannot be combined with --publish (choose one)');
+  }
+  if (at !== undefined) assertFutureIso(at, '--at');
   const dryRun = optBool(values, 'dry-run');
   const force = optBool(values, 'force');
   const writeBack = optBool(values, 'write-back');
@@ -216,8 +250,8 @@ async function postsPush(ctx: Context, args: string[]): Promise<void> {
   );
 
   const body: Record<string, unknown> = isUpdate
-    ? updateBody(fields, prepared, publish, force)
-    : createBody(fields, prepared, publish);
+    ? updateBody(fields, prepared, publish, force, at)
+    : createBody(fields, prepared, publish, at);
   const path = isUpdate && updateId ? `/api/v1/posts/${encodeURIComponent(updateId)}` : '/api/v1/posts';
 
   if (dryRun) {
@@ -237,6 +271,11 @@ async function postsPush(ctx: Context, args: string[]): Promise<void> {
     nextData.excerpt = post.excerpt ?? '';
     nextData.featured_image = post.featured_image_url;
     nextData.status = post.status;
+    if (post.status === 'scheduled' && post.published_at) {
+      nextData.publish_at = post.published_at;
+    } else {
+      delete nextData.publish_at;
+    }
     nextData.updated_at = post.updated_at;
     await writeFile(file, serializeFrontMatter(nextData, prepared.markdown), 'utf8');
     out.note(`Wrote ${file}`);
@@ -262,6 +301,7 @@ async function postsCreate(ctx: Context, args: string[]): Promise<void> {
       file: { type: 'string' },
       stdin: { type: 'boolean' },
       publish: { type: 'boolean' },
+      at: { type: 'string' },
       'dry-run': { type: 'boolean' },
       'allow-outside-dir': { type: 'boolean' },
     },
@@ -277,6 +317,11 @@ async function postsCreate(ctx: Context, args: string[]): Promise<void> {
     throw usageError('posts create requires exactly one of --file or --stdin');
   }
   const publish = optBool(values, 'publish');
+  const at = optString(values, 'at');
+  if (publish && at !== undefined) {
+    throw usageError('--at cannot be combined with --publish (choose one)');
+  }
+  if (at !== undefined) assertFutureIso(at, '--at');
   const dryRun = optBool(values, 'dry-run');
   const allowOutsideDir = optBool(values, 'allow-outside-dir');
 
@@ -296,8 +341,9 @@ async function postsCreate(ctx: Context, args: string[]): Promise<void> {
     excerpt: optString(values, 'excerpt'),
     category,
     content_markdown: prepared.markdown,
-    status: publish ? 'published' : 'draft',
+    status: publish ? 'published' : at !== undefined ? 'scheduled' : 'draft',
   };
+  if (at !== undefined) body.publish_at = at;
   const path = '/api/v1/posts';
 
   if (dryRun) {
@@ -395,12 +441,17 @@ async function postsSetStatus(
   action: 'publish' | 'unpublish',
 ): Promise<void> {
   const { out } = ctx;
-  const { positionals } = parseOptions(args, {}, true);
+  const options: OptionSpec = action === 'publish' ? { at: { type: 'string' } } : {};
+  const { values, positionals } = parseOptions(args, options, true);
   const id = assertUuid(singleRef(positionals, `posts ${action}`), 'post id');
+  const at = action === 'publish' ? optString(values, 'at') : undefined;
+  if (at !== undefined) assertFutureIso(at, '--at');
+
   const client = await makeClient(ctx);
   const post = await client.request<Post>({
     method: 'POST',
     path: `/api/v1/posts/${encodeURIComponent(id)}/${action}`,
+    ...(at === undefined ? {} : { json: { at } }),
   });
   if (out.json) out.jsonDoc(post);
   else printPostSummary(out, post);
@@ -466,7 +517,8 @@ interface FrontMatterFields {
   category?: string;
   featuredImage: string | null;
   hasFeaturedImage: boolean;
-  status?: 'draft' | 'published';
+  status?: 'draft' | 'scheduled' | 'published';
+  publishAt?: string;
   updatedAt?: string;
 }
 
@@ -490,10 +542,18 @@ function readFields(data: Record<string, unknown>): FrontMatterFields {
   }
   const status = optionalString(data, 'status');
   if (status !== undefined) {
-    if (status !== 'draft' && status !== 'published') {
-      throw usageError('front matter field `status` must be "draft" or "published"');
+    if (status !== 'draft' && status !== 'published' && status !== 'scheduled') {
+      throw usageError('front matter field `status` must be "draft", "scheduled" or "published"');
     }
     fields.status = status;
+  }
+  const publishAt = optionalString(data, 'publish_at');
+  if (publishAt !== undefined) {
+    if (fields.status !== 'scheduled') {
+      throw usageError('front matter field `publish_at` requires `status: scheduled`');
+    }
+    assertFutureIso(publishAt, 'publish_at');
+    fields.publishAt = publishAt;
   }
   return fields;
 }
@@ -502,8 +562,13 @@ function createBody(
   fields: FrontMatterFields,
   prepared: Prepared,
   publish: boolean,
+  at: string | undefined,
 ): Record<string, unknown> {
-  const status = publish || fields.status === 'published' ? 'published' : 'draft';
+  const status: 'draft' | 'scheduled' | 'published' = publish
+    ? 'published'
+    : at !== undefined
+      ? 'scheduled'
+      : (fields.status ?? 'draft');
   const body: Record<string, unknown> = {
     title: fields.title,
     slug: fields.slug,
@@ -512,6 +577,9 @@ function createBody(
     content_markdown: prepared.markdown,
     status,
   };
+  if (status === 'scheduled') {
+    body.publish_at = requirePublishAt(fields, at);
+  }
   if (fields.hasFeaturedImage) body.featured_image_url = prepared.featuredImage;
   return body;
 }
@@ -521,6 +589,7 @@ function updateBody(
   prepared: Prepared,
   publish: boolean,
   force: boolean,
+  at: string | undefined,
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {};
   if (fields.title !== undefined) body.title = fields.title;
@@ -530,9 +599,30 @@ function updateBody(
   if (fields.hasFeaturedImage) body.featured_image_url = prepared.featuredImage;
   body.content_markdown = prepared.markdown;
   if (!force && fields.updatedAt) body.if_updated_at = fields.updatedAt;
-  if (publish) body.status = 'published';
-  else if (fields.status !== undefined) body.status = fields.status;
+
+  const status = publish ? 'published' : at !== undefined ? 'scheduled' : fields.status;
+  if (status === 'published') {
+    body.status = 'published';
+  } else if (status === 'scheduled') {
+    body.status = 'scheduled';
+    body.publish_at = requirePublishAt(fields, at);
+  } else if (status === 'draft') {
+    body.status = 'draft';
+  }
   return body;
+}
+
+function requirePublishAt(
+  fields: FrontMatterFields,
+  at: string | undefined,
+): string {
+  const publishAt = at ?? fields.publishAt;
+  if (!publishAt) {
+    throw usageError(
+      'front matter field `publish_at` is required when `status: scheduled`',
+    );
+  }
+  return publishAt;
 }
 
 async function sendPost(
@@ -560,7 +650,7 @@ async function sendPost(
 }
 
 function frontMatterFor(post: Post): Record<string, unknown> {
-  return {
+  const data: Record<string, unknown> = {
     id: post.id,
     title: post.title,
     slug: post.slug,
@@ -570,6 +660,10 @@ function frontMatterFor(post: Post): Record<string, unknown> {
     status: post.status,
     updated_at: post.updated_at,
   };
+  if (post.status === 'scheduled' && post.published_at) {
+    data.publish_at = post.published_at;
+  }
+  return data;
 }
 
 function contentToText(content: unknown, format: ContentFormat): string {
