@@ -33,6 +33,7 @@ export interface RequestOptions {
   json?: unknown;
   form?: FormData;
   auth?: boolean;
+  headers?: Record<string, string>;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -60,6 +61,7 @@ export class ApiClient {
       Accept: 'application/json',
       'User-Agent': `pawpress-cli/${this.version}`,
       ...this.headers,
+      ...options.headers,
     };
     if (options.auth !== false && this.token) {
       headers.Authorization = `Bearer ${this.token}`;

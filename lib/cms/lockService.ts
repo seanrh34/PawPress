@@ -224,13 +224,15 @@ export async function acquireLock(
 }
 
 /**
- * The post's current unexpired lock, or null. `now` is injectable for tests.
+ * The post's current unexpired lock plus whether locking is installed. Unlike
+ * `getLock`, this distinguishes "no lock" from "locking unavailable" for
+ * readers that report the mode (e.g. `GET /posts/:idOrSlug`).
  */
-export async function getLock(
+export async function getLockState(
   db: SupabaseClient,
   postId: string,
   now: string = new Date().toISOString(),
-): Promise<EditLock | null> {
+): Promise<{ locking: 'enabled' | 'unavailable'; lock: EditLock | null }> {
   const { data, error } = await db
     .from('post_edit_locks')
     .select('*')
@@ -241,16 +243,27 @@ export async function getLock(
   if (error) {
     if (isLockingUnavailableError(error)) {
       warnLockingUnavailableOnce();
-      return null;
+      return { locking: 'unavailable', lock: null };
     }
     throw internalLockError('read edit lock', error);
   }
 
-  if (!data) {
-    return null;
-  }
+  return {
+    locking: 'enabled',
+    lock: data ? toEditLock(data as LockRow) : null,
+  };
+}
 
-  return toEditLock(data as LockRow);
+/**
+ * The post's current unexpired lock, or null (also when locking is
+ * unavailable). `now` is injectable for tests.
+ */
+export async function getLock(
+  db: SupabaseClient,
+  postId: string,
+  now: string = new Date().toISOString(),
+): Promise<EditLock | null> {
+  return (await getLockState(db, postId, now)).lock;
 }
 
 /**
@@ -302,6 +315,26 @@ function lockMessage(lock: EditLock, takenOver: boolean): string {
 }
 
 /**
+ * Builds the `409 locked` error for a lock held by another session. `sessionId`
+ * omitted means "any lock blocks me"; when provided, losing a held lock is
+ * reported as a takeover. Never includes the foreign session id.
+ */
+export function foreignLockError(
+  lock: EditLock,
+  sessionId?: string,
+): ApiError {
+  const takenOver = sessionId !== undefined;
+  const details: LockErrorDetails = {
+    holder: lock.holder,
+    acquired_at: lock.acquired_at,
+    expires_at: lock.expires_at,
+    taken_over: takenOver,
+  };
+
+  return ApiError.locked(lockMessage(lock, takenOver), details);
+}
+
+/**
  * Throws `409 locked` when an unexpired lock is held by a different session.
  * `sessionId` omitted means "any lock blocks me"; when provided, the caller's
  * own session does not block, and losing a held lock is reported as a takeover.
@@ -327,15 +360,7 @@ export async function assertNoForeignLock(
     return;
   }
 
-  const takenOver = sessionId !== undefined;
-  const details: LockErrorDetails = {
-    holder: lock.holder,
-    acquired_at: lock.acquired_at,
-    expires_at: lock.expires_at,
-    taken_over: takenOver,
-  };
-
-  throw ApiError.locked(lockMessage(lock, takenOver), details);
+  throw foreignLockError(lock, sessionId);
 }
 
 /**

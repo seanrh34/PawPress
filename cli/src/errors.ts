@@ -46,6 +46,7 @@ const CODE_EXIT: Record<string, ExitCode> = {
   forbidden: EXIT.AUTH,
   not_found: EXIT.NOT_FOUND,
   conflict: EXIT.CONFLICT,
+  locked: EXIT.CONFLICT,
   validation_failed: EXIT.VALIDATION,
   payload_too_large: EXIT.VALIDATION,
   unsupported_media_type: EXIT.VALIDATION,

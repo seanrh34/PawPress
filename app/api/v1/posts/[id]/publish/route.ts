@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { audit, withApi } from '@/lib/api/withApi';
+import { lockSessionFromHeader } from '@/lib/api/lockSession';
 import { ApiError } from '@/lib/cms/errors';
 import { isUuid } from '@/lib/cms/categoryService';
+import { assertNoForeignLock } from '@/lib/cms/lockService';
 import { publishPost } from '@/lib/cms/postService';
 import {
   ensurePostCategory,
@@ -35,6 +37,13 @@ export const POST = withApi<{ id: string }>(
         at = parsePublishAt(body.at, 'at');
       }
     }
+
+    await assertNoForeignLock(
+      ctx.auth.db,
+      id,
+      lockSessionFromHeader(req),
+      ctx.auth.userId,
+    );
 
     const published = await publishPost(ctx.auth.db, id, at ? { at } : {});
     const post = await ensurePostCategory(ctx.auth.db, published);

@@ -56,6 +56,14 @@ export function printPostSummary(out: Output, post: Post): void {
   out.line(`status: ${post.status}`);
   out.line(`category: ${post.category ? post.category.slug : '(none)'}`);
   out.line(`updated_at: ${post.updated_at}`);
+  if (post.edit_lock) {
+    const holder = post.edit_lock.holder;
+    out.line(
+      `edit_lock: ${holder.kind} ${holder.label} (since ${post.edit_lock.acquired_at}, expires ${post.edit_lock.expires_at})`,
+    );
+  } else if (post.locking === 'unavailable') {
+    out.line('edit_lock: unavailable (apply the post_edit_locks migration)');
+  }
 }
 
 export function printCategorySummary(out: Output, category: Category): void {
