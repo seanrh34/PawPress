@@ -31,8 +31,11 @@ grant select, insert, update, delete on table public.post_edit_locks to service_
 --   * p_force is true (a human admin taking over; the app only passes it for cookie sessions).
 -- Concurrent callers are serialised by the primary key, so at most one of them wins.
 --
+-- Agents (holder_kind 'agent') may hold at most 5 unexpired locks per user across other posts,
+-- so a token can't lock every post. Humans aren't capped.
+--
 -- Returns {"acquired": bool, "lock": {...current lock row...}}. When acquired is false, "lock"
--- describes the other holder.
+-- describes the other holder (or is null), and "reason" is 'held' or 'too_many_locks'.
 create or replace function public.acquire_post_edit_lock(
   p_post_id         uuid,
   p_session_id      uuid,
@@ -48,10 +51,26 @@ security invoker
 set search_path = public
 as $$
 declare
-  v_row public.post_edit_locks;
+  v_row   public.post_edit_locks;
+  v_count integer;
 begin
   if p_ttl_seconds is null or p_ttl_seconds < 30 or p_ttl_seconds > 3600 then
     raise exception 'p_ttl_seconds must be between 30 and 3600';
+  end if;
+
+  if p_holder_kind = 'agent' and not coalesce(p_force, false) then
+    select count(*) into v_count
+      from public.post_edit_locks
+     where holder_user_id = p_holder_user_id
+       and holder_kind = 'agent'
+       and expires_at > now()
+       and post_id <> p_post_id;
+    if v_count >= 5 then
+      select * into v_row from public.post_edit_locks where post_id = p_post_id;
+      return jsonb_build_object(
+        'acquired', false, 'reason', 'too_many_locks', 'limit', 5,
+        'lock', case when v_row.post_id is null then null else to_jsonb(v_row) end);
+    end if;
   end if;
 
   insert into public.post_edit_locks as l (
@@ -79,7 +98,7 @@ begin
   end if;
 
   select * into v_row from public.post_edit_locks where post_id = p_post_id;
-  return jsonb_build_object('acquired', false, 'lock', to_jsonb(v_row));
+  return jsonb_build_object('acquired', false, 'reason', 'held', 'lock', to_jsonb(v_row));
 end;
 $$;
 
@@ -87,3 +106,18 @@ revoke all on function public.acquire_post_edit_lock(uuid, uuid, text, uuid, uui
   from public, anon, authenticated;
 grant execute on function public.acquire_post_edit_lock(uuid, uuid, text, uuid, uuid, text, integer, boolean)
   to service_role;
+
+-- The post's current unexpired lock (or null), judged by the database clock so app-server clock
+-- skew can't make a lock look alive or expired.
+create or replace function public.get_post_edit_lock(p_post_id uuid) returns jsonb
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select to_jsonb(l) from public.post_edit_locks l
+   where l.post_id = p_post_id and l.expires_at > now();
+$$;
+
+revoke all on function public.get_post_edit_lock(uuid) from public, anon, authenticated;
+grant execute on function public.get_post_edit_lock(uuid) to service_role;
