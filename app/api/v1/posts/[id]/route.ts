@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
 import { audit, withApi } from '@/lib/api/withApi';
+import { lockSessionFromHeader } from '@/lib/api/lockSession';
 import { ApiError } from '@/lib/cms/errors';
 import { isUuid } from '@/lib/cms/categoryService';
+import {
+  assertNoForeignLock,
+  getLockState,
+  toPublicLock,
+} from '@/lib/cms/lockService';
 import {
   assertScope,
   requiredScopesForPostUpdate,
@@ -40,10 +46,15 @@ export const GET = withApi<{ id: string }>(
       throw ApiError.notFound('Post not found');
     }
 
+    const lockState = await getLockState(ctx.auth.db, post.id);
+    const viewerSession = lockSessionFromHeader(req);
+
     return NextResponse.json({
       ...toPostResource(post),
       content: contentForPost(post, format),
       content_format: format,
+      edit_lock: toPublicLock(lockState.lock, viewerSession),
+      locking: lockState.locking,
     });
   },
   { auth: 'token', scope: 'posts:read' },
@@ -98,6 +109,14 @@ export const PATCH = withApi<{ id: string }>(
       patch.published_at = publishedAt;
     }
 
+    // Edit locks apply after auth/scope/validation but before any write.
+    await assertNoForeignLock(
+      ctx.auth.db,
+      id,
+      lockSessionFromHeader(req),
+      ctx.auth.userId,
+    );
+
     // Always write against the version the scope decision above was made on,
     // so a post published concurrently can't be edited with only posts:write.
     const updated = await updatePost(ctx.auth.db, id, patch, {
@@ -113,11 +132,18 @@ export const PATCH = withApi<{ id: string }>(
 );
 
 export const DELETE = withApi<{ id: string }>(
-  async (_req, ctx) => {
+  async (req, ctx) => {
     const id = ctx.params.id;
     if (!isUuid(id)) {
       throw ApiError.notFound('Post not found');
     }
+
+    await assertNoForeignLock(
+      ctx.auth.db,
+      id,
+      lockSessionFromHeader(req),
+      ctx.auth.userId,
+    );
 
     await deletePost(ctx.auth.db, id);
     audit(ctx, 'post.delete', 'post', id);
