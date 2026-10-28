@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type { CSSProperties } from 'react';
 import { BrowserFrame } from '@/components/shared/browser-frame';
 import { Bracket } from '@/components/brand/bracket';
 import { Post } from '@/lib/types';
@@ -30,25 +31,47 @@ export default function PostCard({ post, featured = false, index }: PostCardProp
   return (
     <Link
       href={`/${post.slug}`}
-      className={`app-card group relative block h-full ${featured ? 'md:col-span-2 lg:col-span-3' : ''}`}
+      className={`app-card group relative block h-full min-w-0 ${featured ? 'md:col-span-2 lg:col-span-3' : ''}`}
     >
-      <div className={`relative flex h-full flex-col overflow-hidden rounded-panel border border-rail bg-platform-raised ${featured ? 'lg:flex-row' : ''}`}>
+      <div className={`relative flex h-full min-w-0 flex-col overflow-hidden rounded-panel border border-rail bg-platform-raised ${featured ? 'lg:flex-row' : ''}`}>
         {/* Tinted image panel with the featured image in browser chrome */}
-        <div className={`relative ${tint} px-6 pb-9 pt-10 md:px-9 ${featured ? 'lg:w-[55%]' : ''}`}>
+        <div className={`relative min-w-0 ${tint} px-6 pb-9 pt-10 md:px-9 ${featured ? 'lg:w-[55%]' : ''}`}>
           {featured && (
             <Bracket shape="corner" className="card-corner absolute left-4 top-4 size-8" stroke="var(--text)" strokeWidth={3.5} />
           )}
-          <BrowserFrame
-            src={post.featured_image_url ?? '/images/pawpress-screenshot.png'}
-            alt=""
-            host={`blog.34cats.com/${post.slug}`}
-            rotate={rotate}
-            sizes={featured ? '(max-width: 1024px) 100vw, 700px' : '(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw'}
-          />
+          {post.featured_image_url ? (
+            <BrowserFrame
+              src={post.featured_image_url}
+              alt=""
+              host={`blog.34cats.com/${post.slug}`}
+              rotate={rotate}
+              sizes={featured ? '(max-width: 1024px) 100vw, 700px' : '(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw'}
+            />
+          ) : (
+            <div
+              className="card-frame overflow-hidden rounded-xl border-2 border-copy"
+              style={{ '--frame-rot': `${rotate}deg` } as CSSProperties}
+            >
+              <div className="flex items-center gap-3 border-b-2 border-copy bg-surface-subtle px-3 py-2" aria-hidden="true">
+                <span className="flex shrink-0 gap-1.5">
+                  <span className="size-2.5 rounded-full bg-tomato" />
+                  <span className="size-2.5 rounded-full bg-butter" />
+                  <span className="size-2.5 rounded-full bg-sage" />
+                </span>
+                <span className="min-w-0 flex-1 truncate rounded-full bg-platform-raised px-3 py-1 font-mono text-[0.6875rem] text-copy-muted">
+                  {`blog.34cats.com/${post.slug}`}
+                </span>
+              </div>
+              <div className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-2">
+                <Bracket shape="open" className="w-16" stroke="var(--text)" strokeWidth={5} />
+                <span className="portal-label text-copy-muted">no cover image</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Body */}
-        <div className="flex flex-1 flex-col p-6 md:p-8">
+        <div className="flex min-w-0 flex-1 flex-col p-6 md:p-8">
           {post.category && (
             <span className="portal-label w-fit rounded-full border border-copy px-2.5 py-1 text-copy">
               {post.category.name}

@@ -104,7 +104,7 @@ export default function CliTerminal() {
   };
 
   return (
-    <div className="overflow-hidden rounded-panel border border-[#3b3429] bg-[#221e17]">
+    <div className="min-w-0 overflow-hidden rounded-panel border border-[#3b3429] bg-[#221e17]">
       {/* Window chrome */}
       <div className="flex items-center gap-2 border-b border-[#3b3429] px-4 py-3">
         <span className="size-3 rounded-full bg-[#ff6a4a]" aria-hidden="true" />

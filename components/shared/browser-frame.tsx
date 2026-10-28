@@ -14,9 +14,9 @@ interface BrowserFrameProps {
 /** Mini browser chrome around a screenshot, cropped so the image edges never show. */
 export function BrowserFrame({ src, alt, host, rotate = -1.5, sizes = "(max-width: 768px) 100vw, 50vw", priority }: BrowserFrameProps) {
   return (
-    <div className="card-frame overflow-hidden rounded-xl border-2 border-copy bg-platform-raised" style={{ "--frame-rot": `${rotate}deg` } as CSSProperties}>
-      <div className="flex items-center gap-3 border-b-2 border-copy bg-surface-subtle px-3 py-2" aria-hidden="true">
-        <span className="flex gap-1.5">
+    <div className="card-frame min-w-0 overflow-hidden rounded-xl border-2 border-copy bg-platform-raised" style={{ "--frame-rot": `${rotate}deg` } as CSSProperties}>
+      <div className="flex min-w-0 items-center gap-3 border-b-2 border-copy bg-surface-subtle px-3 py-2" aria-hidden="true">
+        <span className="flex shrink-0 gap-1.5">
           <span className="size-2.5 rounded-full bg-tomato" />
           <span className="size-2.5 rounded-full bg-butter" />
           <span className="size-2.5 rounded-full bg-sage" />

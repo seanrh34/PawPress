@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 
-/** 44px pause/play toggle for the marquee; sets .is-paused on the nearest .marquee band. */
+/** 44px pause/play toggle sitting at the right end of the ink band. */
 export default function TickerPauseButton() {
   const [paused, setPaused] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
@@ -14,17 +14,16 @@ export default function TickerPauseButton() {
   };
 
   return (
-    <span className="absolute right-4 top-1/2 z-10 -translate-y-1/2">
-      <button
-        ref={ref}
-        type="button"
-        onClick={toggle}
-        aria-pressed={paused}
-        className="portal-button portal-button-secondary rounded-full"
-      >
-        <span aria-hidden="true">{paused ? '▶' : '❚❚'}</span>
-        <span className="sr-only">{paused ? 'Play ticker' : 'Pause ticker'}</span>
-      </button>
-    </span>
+    <button
+      ref={ref}
+      type="button"
+      onClick={toggle}
+      aria-pressed={paused}
+      className="portal-button rounded-full border border-platform/40 bg-copy text-platform hover:bg-platform hover:text-copy"
+      style={{ position: 'absolute', top: '50%', right: 'calc(4% + 0.75rem)', transform: 'translateY(-50%)', width: '2.75rem', height: '2.75rem', padding: 0, justifyContent: 'center', zIndex: 10 }}
+    >
+      <span aria-hidden="true">{paused ? '▶' : '❚❚'}</span>
+      <span className="sr-only">{paused ? 'Play ticker' : 'Pause ticker'}</span>
+    </button>
   );
 }

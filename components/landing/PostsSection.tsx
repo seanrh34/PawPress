@@ -51,8 +51,7 @@ export default function PostsSection({ posts }: PostsSectionProps) {
             <h2 className="portal-heading mt-3 text-4xl md:text-6xl">Latest posts</h2>
           </div>
           <div className="sm:text-right">
-            <p className="text-sm text-copy-muted">Newest first.</p>
-            <Link href="/category" className="mt-1 inline-flex min-h-11 items-center gap-1 text-sm font-medium text-signal hover:underline">
+            <Link href="/category" className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-signal hover:underline">
               All categories <span aria-hidden="true">→</span>
             </Link>
           </div>
@@ -60,7 +59,7 @@ export default function PostsSection({ posts }: PostsSectionProps) {
 
         {posts.length > 0 ? (
           <>
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
               {currentPosts.map((post, index) => (
                 <PostCard
                   key={post.id}

@@ -66,7 +66,7 @@ export default function CliSection() {
         }}
       />
       <div className="relative mx-auto max-w-6xl px-5 md:px-8">
-        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+        <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-16">
           {/* Copy */}
           <div>
             <p className="portal-label text-[#ff6a4a]">[03] pawpress CLI</p>
@@ -95,7 +95,7 @@ export default function CliSection() {
         {/* Get started */}
         <div className="mt-16 sm:mt-20">
           <h3 className="portal-heading text-2xl">Get started in 3 steps</h3>
-          <div className="mt-6 grid gap-4 sm:gap-6 lg:grid-cols-3">
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
             {QUICK_START.map((step, index) => (
               <div
                 key={step.title}

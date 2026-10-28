@@ -20,13 +20,13 @@ export default function TickerStrip({ names }: { names: string[] }) {
 
   return (
     <div className="relative overflow-hidden py-4 md:py-8" role="region" aria-label="Topics and tools">
-      <div className="marquee -mx-[4%] w-[108%] -rotate-[1.5deg] bg-copy py-3.5 text-platform md:py-4">
+      <div className="marquee relative -mx-[4%] w-[108%] -rotate-[1.5deg] bg-copy py-3.5 text-platform md:py-4">
         <div className="marquee-track">
           {renderHalf(false)}
           {renderHalf(true)}
         </div>
+        <TickerPauseButton />
       </div>
-      <TickerPauseButton />
     </div>
   );
 }

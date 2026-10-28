@@ -45,10 +45,10 @@ export default async function CategoriesPage() {
 
         {/* Categories Grid */}
         {categories.length > 0 ? (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {categories.map((category) => (
-              <Link key={category.id} href={`/category/${category.slug}`} className="app-card group relative block h-full">
-                <div className="flex h-full flex-col rounded-panel border border-rail bg-platform-raised p-6 md:p-8">
+              <Link key={category.id} href={`/category/${category.slug}`} className="app-card group relative block h-full min-w-0">
+                <div className="flex h-full min-w-0 flex-col rounded-panel border border-rail bg-platform-raised p-6 md:p-8">
                   <h2 className="portal-heading break-words text-2xl text-copy">{category.name}</h2>
                   {category.description && (
                     <p className="mt-2 line-clamp-3 flex-1 text-copy-muted">{category.description}</p>

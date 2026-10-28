@@ -33,7 +33,7 @@ const ROW_TINTS = ['var(--butter)', 'var(--lilac)', 'var(--sage)', 'var(--sky)']
 export default function PawPressSection() {
   return (
     <section id="pawpress" className="px-5 py-16 md:px-8 md:py-24">
-      <div className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-2 lg:gap-16">
+      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
         <div>
           <p className="portal-label text-signal">[02] Build your own</p>
           <h2 className="portal-heading mt-3 text-4xl md:text-5xl">Want a blog like this one? Fork it.</h2>
@@ -80,7 +80,7 @@ export default function PawPressSection() {
           </div>
         </div>
 
-        <div className="lg:pt-12">
+        <div className="min-w-0 lg:pt-12">
           <div className="rounded-panel bg-butter p-5 sm:p-8">
             <div className="frame-hover">
               <BrowserFrame
