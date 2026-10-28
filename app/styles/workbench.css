@@ -795,6 +795,17 @@ body::before {
   }
 }
 
+/* ---------- PawPress landing additions ---------- */
+/* Utilities are layered, so a plain-class override is needed for pill buttons. */
+.portal-button.rounded-full {
+  border-radius: 9999px;
+}
+
+/* Ticker pause toggle (aria-pressed button sets .is-paused on the band). */
+.marquee.is-paused .marquee-track {
+  animation-play-state: paused;
+}
+
 /* ---------- Reduced motion: everything visible, nothing moves ---------- */
 @media (prefers-reduced-motion: reduce) {
   html {

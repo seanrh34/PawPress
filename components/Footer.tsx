@@ -1,126 +1,94 @@
 import Link from 'next/link';
-import { FaGithub, FaLinkedin, FaEnvelope } from 'react-icons/fa';
+import { Reveal } from '@/components/motion/reveal';
+
+const groups = [
+  {
+    heading: 'Blog',
+    links: [
+      { label: 'Posts', href: '/#posts' },
+      { label: 'Categories', href: '/category' },
+      { label: 'CLI', href: '/#cli' },
+      { label: 'Admin', href: '/admin' },
+    ],
+  },
+  {
+    heading: '34cats',
+    links: [
+      { label: 'Portfolio', href: 'https://34cats.com' },
+      { label: 'Apps', href: 'https://apps.34cats.com' },
+      { label: 'GitHub', href: 'https://github.com/seanrh34' },
+    ],
+  },
+  {
+    heading: 'Contact',
+    links: [
+      { label: 'Email', href: 'mailto:34cats.dev@gmail.com' },
+      { label: 'LinkedIn', href: 'https://www.linkedin.com/in/sean-hardjanto-0b8874139/' },
+    ],
+  },
+] as const;
+
+const linkClass = 'inline-flex min-h-11 items-center text-sm text-copy-muted transition-colors hover:text-signal';
 
 export default function Footer() {
-  const currentYear = new Date().getFullYear();
-
   return (
-    <footer className="bg-gray-900 text-gray-300">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* About Section */}
-          <div>
-            <h3 className="text-white text-lg font-semibold mb-4">About 34cats</h3>
-            <p className="text-sm">
-              A modern blog sharing insights on technology, development, and design.
-              Powered by PawPress CMS.
-            </p>
-          </div>
-
-          {/* Quick Links */}
-          <div>
-            <h3 className="text-white text-lg font-semibold mb-4">Quick Links</h3>
-            <ul className="text-sm">
-              <li>
-                <Link
-                  href="/#home"
-                  className="inline-flex min-h-11 items-center sm:min-h-0 sm:py-1 hover:text-white transition-colors"
-                >
-                  Home
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/#posts"
-                  className="inline-flex min-h-11 items-center sm:min-h-0 sm:py-1 hover:text-white transition-colors"
-                >
-                  Posts
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/category"
-                  className="inline-flex min-h-11 items-center sm:min-h-0 sm:py-1 hover:text-white transition-colors"
-                >
-                  Categories
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/#pawpress"
-                  className="inline-flex min-h-11 items-center sm:min-h-0 sm:py-1 hover:text-white transition-colors"
-                >
-                  Build Your Own
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/#cli"
-                  className="inline-flex min-h-11 items-center sm:min-h-0 sm:py-1 hover:text-white transition-colors"
-                >
-                  CLI
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/#contact"
-                  className="inline-flex min-h-11 items-center sm:min-h-0 sm:py-1 hover:text-white transition-colors"
-                >
-                  Contact
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/admin"
-                  className="inline-flex min-h-11 items-center sm:min-h-0 sm:py-1 hover:text-white transition-colors"
-                >
-                  Admin Dashboard
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Contact/Social */}
-          <div>
-            <h3 className="text-white text-lg font-semibold mb-4">Connect</h3>
-            <p className="text-sm mb-4">
-              Let&apos;s stay in touch! Reach out through any of these channels.
-            </p>
-            <div className="flex gap-3">
-              <a
-                href="mailto:hello@34cats.com"
-                className="flex h-11 w-11 items-center justify-center text-2xl hover:text-blue-400 transition-colors"
-                aria-label="Email"
-              >
-                <FaEnvelope aria-hidden="true" />
-              </a>
-              <a
-                href="https://www.linkedin.com/in/sean-hardjanto-0b8874139/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex h-11 w-11 items-center justify-center text-2xl hover:text-blue-400 transition-colors"
-                aria-label="LinkedIn"
-              >
-                <FaLinkedin aria-hidden="true" />
-              </a>
-              <a
-                href="https://github.com/seanrh34"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex h-11 w-11 items-center justify-center text-2xl hover:text-blue-400 transition-colors"
-                aria-label="GitHub"
-              >
-                <FaGithub aria-hidden="true" />
-              </a>
-            </div>
-          </div>
+    <footer className="overflow-hidden border-t border-rail bg-platform-raised px-5 pt-12 md:px-8 md:pt-16">
+      <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-[1.5fr_3fr]">
+        <div>
+          <p className="portal-heading text-2xl">34cats</p>
+          <p className="mt-3 max-w-xs text-sm leading-relaxed text-copy-muted">
+            Writing by Sean, published with PawPress.
+          </p>
+          <a
+            href="mailto:34cats.dev@gmail.com"
+            className="mt-5 inline-flex min-h-11 items-center text-sm text-signal underline underline-offset-4"
+          >
+            34cats.dev@gmail.com
+          </a>
         </div>
-
-        {/* Bottom Bar */}
-        <div className="border-t border-gray-800 mt-8 pt-8 text-sm text-center">
-          <p>&copy; {currentYear} 34cats. All rights reserved.</p>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-8 min-[360px]:grid-cols-3">
+          {groups.map((group) => (
+            <div key={group.heading}>
+              <p className="portal-label text-copy">{group.heading}</p>
+              <ul className="mt-3">
+                {group.links.map((link) => (
+                  <li key={link.label}>
+                    {link.href.startsWith('http') ? (
+                      <a href={link.href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+                        {link.label}&nbsp;<span aria-hidden="true">↗</span>
+                        <span className="sr-only"> (opens in a new tab)</span>
+                      </a>
+                    ) : (
+                      <Link href={link.href} className={linkClass}>
+                        {link.label}
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
       </div>
+      <div className="mx-auto mt-10 flex max-w-6xl flex-col gap-2 border-t border-rail pt-6 text-xs text-copy-muted sm:flex-row sm:justify-between">
+        <p>© {new Date().getFullYear()} 34cats</p>
+        <p>Built with PawPress.</p>
+      </div>
+      <Reveal variant="fade" className="wordmark-wrap relative mx-auto mt-8 max-w-6xl select-none">
+        <Wordmark color="var(--border)" />
+        <Wordmark color="var(--accent)" className="wordmark-fill" />
+      </Reveal>
     </footer>
+  );
+}
+
+/** Edge-to-edge "34cats": textLength pins the width, the viewBox crops the bottom. */
+function Wordmark({ color, className }: { color: string; className?: string }) {
+  return (
+    <svg viewBox="0 30 1000 240" className={`block w-full ${className ?? ''}`} aria-hidden="true" focusable="false">
+      <text x="0" y="270" textLength="1000" lengthAdjust="spacingAndGlyphs" fill={color} fontSize="330" className="wordmark-text">
+        34cats
+      </text>
+    </svg>
   );
 }

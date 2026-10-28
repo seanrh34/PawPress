@@ -1,21 +1,27 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 
 const NAV_LINKS = [
-  { href: '/#home', label: 'Home' },
   { href: '/#posts', label: 'Posts' },
   { href: '/category', label: 'Categories' },
-  { href: '/#pawpress', label: 'Build Your Own' },
+  { href: '/#pawpress', label: 'PawPress' },
   { href: '/#cli', label: 'CLI' },
-  { href: '/#contact', label: 'Contact' },
 ] as const;
 
 export default function Header() {
   const [isOpen, setIsOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -30,74 +36,83 @@ export default function Header() {
   }, [isOpen]);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-gray-200 bg-white/80 backdrop-blur">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
-          {/* Logo */}
-          <Link href="/" className="flex min-h-11 items-center" aria-label="34cats home">
-            <Image
-              src="/34cats_main_light.png"
-              alt="34cats Logo"
-              width={150}
-              height={40}
-              className="h-8 sm:h-10 w-auto"
-              priority
-            />
-          </Link>
+    <header className="sticky top-0 z-50 px-3 pt-3">
+      <nav
+        aria-label="Main"
+        className={`mx-auto flex max-w-6xl items-center gap-4 rounded-full border border-rail bg-platform/80 py-1.5 pl-5 pr-2 backdrop-blur-md transition-shadow duration-300 ${
+          scrolled ? 'shadow-[0_10px_30px_-10px_rgba(28,25,21,0.35)]' : 'shadow-[0_2px_8px_-4px_rgba(28,25,21,0.2)]'
+        }`}
+      >
+        <Link href="/" className="-my-3 flex shrink-0 items-center" aria-label="34cats home">
+          <Image src="/34cats_main_light.png" alt="" width={240} height={120} className="h-16 w-auto" priority />
+        </Link>
 
-          {/* Desktop Navigation Links (lg and up) */}
-          <nav className="hidden lg:flex items-center gap-7" aria-label="Main navigation">
-            {NAV_LINKS.map((link) => (
+        <div className="hidden items-center gap-5 md:flex">
+          {NAV_LINKS.map((link) => (
+            <Link key={link.href} href={link.href} className="nav-link text-sm font-medium text-copy">
+              {link.label}
+            </Link>
+          ))}
+        </div>
+
+        <div className="ml-auto hidden items-center gap-2 md:flex">
+          <a
+            href="https://34cats.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="nav-link text-sm font-medium text-copy"
+          >
+            Portfolio <span aria-hidden="true" className="ml-1">↗</span>
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
+          <Link href="/#contact" className="portal-button portal-button-primary rounded-full">
+            Say hello
+          </Link>
+        </div>
+
+        <div className="ml-auto flex items-center md:hidden">
+          <button
+            ref={menuButtonRef}
+            type="button"
+            className="portal-button portal-button-secondary rounded-full"
+            onClick={() => setIsOpen((open) => !open)}
+            aria-expanded={isOpen}
+            aria-controls={isOpen ? 'mobile-navigation' : undefined}
+          >
+            {isOpen ? 'Close' : 'Menu'}
+          </button>
+        </div>
+      </nav>
+
+      {isOpen && (
+        <div
+          id="mobile-navigation"
+          className="absolute inset-x-3 top-full mt-2 overflow-hidden rounded-[1.75rem] border border-rail bg-platform-raised p-3 shadow-[0_18px_40px_-14px_rgba(28,25,21,0.45)] md:hidden"
+        >
+          <nav aria-label="Mobile" className="space-y-1">
+            {NAV_LINKS.map((link, i) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+                className="nav-menu-item portal-heading block rounded-control px-4 py-3 text-2xl hover:bg-surface-subtle"
+                style={{ '--i': i } as CSSProperties}
+                onClick={() => setIsOpen(false)}
               >
                 {link.label}
               </Link>
             ))}
-          </nav>
-
-          {/* Mobile Menu Button */}
-          <button
-            ref={menuButtonRef}
-            type="button"
-            onClick={() => setIsOpen((open) => !open)}
-            aria-expanded={isOpen}
-            aria-controls={isOpen ? 'mobile-menu' : undefined}
-            aria-label={isOpen ? 'Close menu' : 'Open menu'}
-            className="lg:hidden flex h-11 w-11 items-center justify-center text-gray-600 hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-          >
-            {isOpen ? (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            ) : (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            )}
-          </button>
-        </div>
-
-        {/* Mobile Navigation Menu */}
-        {isOpen && (
-          <nav id="mobile-menu" className="lg:hidden border-t border-gray-200 pb-3" aria-label="Mobile navigation">
-            <div className="flex flex-col">
-              {NAV_LINKS.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setIsOpen(false)}
-                  className="flex min-h-[44px] items-center px-2 text-base font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-colors"
-                >
-                  {link.label}
-                </Link>
-              ))}
+            <div className="nav-menu-item grid gap-2 pt-2 sm:grid-cols-2" style={{ '--i': NAV_LINKS.length } as CSSProperties}>
+              <a href="https://34cats.com" target="_blank" rel="noopener noreferrer" className="portal-button portal-button-secondary">
+                Portfolio <span aria-hidden="true">↗</span>
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+              <Link href="/#contact" onClick={() => setIsOpen(false)} className="portal-button portal-button-primary">
+                Say hello
+              </Link>
             </div>
           </nav>
-        )}
-      </div>
+        </div>
+      )}
     </header>
   );
 }
