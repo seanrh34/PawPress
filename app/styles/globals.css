@@ -158,6 +158,10 @@
 
   .post-content table {
     @apply w-full mb-4 border-collapse;
+    /* body clips horizontal overflow, so wide tables scroll inside the post instead. */
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
   }
 
   .post-content th {
