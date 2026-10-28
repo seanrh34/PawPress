@@ -32,14 +32,13 @@ export default async function CategoriesPage() {
   const categories = await getAllCategories();
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-16">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div className="min-h-screen bg-platform">
+      <main className="mx-auto max-w-6xl px-5 py-12 md:px-8 md:py-16">
         {/* Page Header */}
-        <div className="mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Categories
-          </h1>
-          <p className="text-xl text-gray-600 max-w-3xl">
+        <div className="mb-10 md:mb-14">
+          <p className="portal-label text-signal">[ ] Categories</p>
+          <h1 className="portal-heading mt-3 text-4xl md:text-6xl">Categories</h1>
+          <p className="mt-4 max-w-2xl text-lg text-copy-muted">
             Browse posts by category to find content that interests you.
           </p>
         </div>
@@ -48,30 +47,25 @@ export default async function CategoriesPage() {
         {categories.length > 0 ? (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {categories.map((category) => (
-              <Link 
-                key={category.id}
-                href={`/category/${category.slug}`}
-                className="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6"
-              >
-                <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-                  {category.name}
-                </h2>
-                {category.description && (
-                  <p className="text-gray-600 line-clamp-3">
-                    {category.description}
-                  </p>
-                )}
-                <span className="inline-block mt-4 text-blue-600 hover:text-blue-800 font-medium">
-                  View posts →
-                </span>
+              <Link key={category.id} href={`/category/${category.slug}`} className="app-card group relative block h-full">
+                <div className="flex h-full flex-col rounded-panel border border-rail bg-platform-raised p-6 md:p-8">
+                  <h2 className="portal-heading break-words text-2xl text-copy">{category.name}</h2>
+                  {category.description && (
+                    <p className="mt-2 line-clamp-3 flex-1 text-copy-muted">{category.description}</p>
+                  )}
+                  <span className="mt-5 inline-flex items-center gap-1 text-sm font-medium text-signal">
+                    View posts{' '}
+                    <span aria-hidden="true" className="transition-transform motion-safe:group-hover:translate-x-0.5">
+                      →
+                    </span>
+                  </span>
+                </div>
               </Link>
             ))}
           </div>
         ) : (
-          <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">
-              No categories available yet.
-            </p>
+          <div className="py-12 text-center">
+            <p className="text-lg text-copy-muted">No categories available yet.</p>
           </div>
         )}
       </main>
