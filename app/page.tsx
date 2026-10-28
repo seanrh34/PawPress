@@ -1,10 +1,11 @@
-import { Post } from "@/lib/types";
-import { restCompare, restEq } from "@/lib/supabaseRest";
-import HeroSection from "@/components/landing/HeroSection";
-import PostsSection from "@/components/landing/PostsSection";
-import PawPressSection from "@/components/landing/PawPressSection";
-import CliSection from "@/components/landing/CliSection";
-import ContactSection from "@/components/landing/ContactSection";
+import { Category, Post } from '@/lib/types';
+import { restCompare, restEq } from '@/lib/supabaseRest';
+import HeroSection from '@/components/landing/HeroSection';
+import TickerStrip from '@/components/landing/TickerStrip';
+import PostsSection from '@/components/landing/PostsSection';
+import PawPressSection from '@/components/landing/PawPressSection';
+import CliSection from '@/components/landing/CliSection';
+import ContactSection from '@/components/landing/ContactSection';
 
 async function getPublishedPosts(): Promise<Post[]> {
   try {
@@ -59,12 +60,36 @@ async function getPublishedPosts(): Promise<Post[]> {
   }
 }
 
+async function getAllCategories(): Promise<Category[]> {
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/categories?select=id,name,slug&order=name.asc`, {
+      headers: {
+        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
+      },
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      console.error('Failed to fetch categories');
+      return [];
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    return [];
+  }
+}
+
 export default async function Home() {
   const posts = await getPublishedPosts();
+  const categories = await getAllCategories();
 
   return (
     <div className="min-h-screen">
-      <HeroSection />
+      <HeroSection posts={posts} categoryCount={categories.length} />
+      <TickerStrip names={categories.map((category) => category.name)} />
       <PostsSection posts={posts} />
       <PawPressSection />
       <CliSection />
