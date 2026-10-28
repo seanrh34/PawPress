@@ -53,7 +53,12 @@ const HIGHLIGHTS = [
   },
 ] as const;
 
-const QUICK_START: { title: string; body: React.ReactNode; code: string }[] = [
+const QUICK_START: {
+  title: string;
+  body: React.ReactNode;
+  code?: string;
+  chips?: string[];
+}[] = [
   {
     title: 'Install the CLI',
     body: 'Requires Node.js 20+.',
@@ -67,12 +72,12 @@ const QUICK_START: { title: string; body: React.ReactNode; code: string }[] = [
         scopes and an expiry — the token is shown once. For agents, grant least privilege:
       </>
     ),
-    code: 'posts:read posts:write media:upload',
+    chips: ['posts:read', 'posts:write', 'media:upload'],
   },
   {
     title: 'Log in',
-    body: 'The token is read from stdin, so it never touches your shell history:',
-    code: 'read -rs PAWPRESS_TOKEN\n# paste the token, then press Enter\nprintf \'%s\' "$PAWPRESS_TOKEN" | pawpress auth login --url https://your-site.example',
+    body: 'Run this, paste your token when it waits (nothing is shown), then press Enter. The token never lands in your shell history.',
+    code: 'read -rs PAWPRESS_TOKEN && printf \'%s\' "$PAWPRESS_TOKEN" | pawpress auth login --url https://your-site.example',
   },
 ];
 
@@ -124,14 +129,28 @@ export default function CliSection() {
                   <h4 className="font-semibold text-white">{step.title}</h4>
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-slate-300">{step.body}</p>
-                <div className="relative mt-4">
-                  <pre className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950 p-3 pr-14 font-mono text-xs leading-relaxed text-slate-200">
-                    <code>{step.code}</code>
-                  </pre>
-                  <div className="absolute right-2 top-2">
-                    <CopyButton text={step.code} />
+                {step.chips && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {step.chips.map((chip) => (
+                      <span
+                        key={chip}
+                        className="rounded-md border border-slate-800 bg-slate-950 px-2 py-1 font-mono text-xs text-slate-200"
+                      >
+                        {chip}
+                      </span>
+                    ))}
                   </div>
-                </div>
+                )}
+                {step.code && (
+                  <div className="relative mt-4">
+                    <pre className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950 p-3 pr-16 pt-14 font-mono text-xs leading-relaxed text-slate-200">
+                      <code>{step.code}</code>
+                    </pre>
+                    <div className="absolute right-2 top-2">
+                      <CopyButton text={step.code} />
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

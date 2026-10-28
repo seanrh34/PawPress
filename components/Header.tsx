@@ -34,7 +34,7 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center" aria-label="34cats home">
+          <Link href="/" className="flex min-h-11 items-center" aria-label="34cats home">
             <Image
               src="/34cats_main_light.png"
               alt="34cats Logo"

@@ -17,39 +17,51 @@ const TABS: { id: TabId; label: string }[] = [
 
 const BLANK: TabLine = { kind: 'out', text: '\u00A0' };
 
-// Only real commands and flags from docs/cli.md.
+// Only real commands and flags from docs/cli.md; output lines match what the
+// CLI actually prints (cli/src/commands/shared.ts printPostSummary, out.note,
+// out.table, auth.ts status --json).
 const TAB_CONTENT: Record<TabId, TabLine[]> = {
   edit: [
-    { kind: 'comment', text: '# pull the post as Markdown + YAML front matter' },
+    { kind: 'comment', text: '# pull as Markdown + YAML front matter (takes an edit lock)' },
     { kind: 'cmd', text: 'pawpress posts pull my-post-slug -o post.md' },
-    { kind: 'out', text: 'wrote post.md, locked for editing' },
+    { kind: 'out', text: 'Wrote post.md' },
     BLANK,
     { kind: 'comment', text: '# open it in your editor and make changes' },
     { kind: 'cmd', text: '$EDITOR post.md' },
     BLANK,
     { kind: 'comment', text: '# push updates the post; --write-back refreshes updated_at in the file' },
     { kind: 'cmd', text: 'pawpress posts push post.md --write-back' },
-    { kind: 'out', text: 'updated "My post" (front matter refreshed)' },
+    { kind: 'out', text: 'Wrote post.md' },
+    { kind: 'out', text: 'id: 6f1c…' },
+    { kind: 'out', text: 'title: My post' },
+    { kind: 'out', text: 'slug: my-post' },
+    { kind: 'out', text: 'status: draft' },
   ],
   schedule: [
     { kind: 'comment', text: '# any future ISO-8601 time with an offset' },
     { kind: 'cmd', text: 'pawpress posts push post.md --at 2027-01-15T09:00:00+08:00 --json' },
-    { kind: 'out', text: '{"status":"scheduled","publish_at":"2027-01-15T01:00:00.000+00:00"}' },
+    {
+      kind: 'out',
+      text: '{"id":"6f1c…","slug":"my-post","status":"scheduled","published_at":"2027-01-15T01:00:00+00:00", …}',
+    },
     BLANK,
     { kind: 'comment', text: '# see everything waiting to go live' },
     { kind: 'cmd', text: 'pawpress posts list --status scheduled' },
-    { kind: 'out', text: '2 posts scheduled' },
+    { kind: 'out', text: 'id      status                               slug' },
+    { kind: 'out', text: '6f1c…   scheduled 2027-01-15T01:00:00+00:00  my-post' },
   ],
   agents: [
     { kind: 'cmd', text: 'pawpress auth status --json' },
     { kind: 'out', text: '{' },
-    { kind: 'out', text: '  "user": "agent@example.com",' },
-    { kind: 'out', text: '  "scopes": ["posts:read", "posts:write", "media:upload"],' },
-    { kind: 'out', text: '  "expires_at": "2027-01-31T00:00:00Z"' },
+    { kind: 'out', text: '  "user": { "email": "agent@example.com", "role": "admin" },' },
+    {
+      kind: 'out',
+      text: '  "token": { "name": "hermes", "scopes": ["posts:read", "posts:write", "media:upload"], "expires_at": "2027-01-31T00:00:00Z" }',
+    },
     { kind: 'out', text: '}' },
     BLANK,
     { kind: 'cmd', text: 'pawpress posts create --title "…" --category news --file draft.md --json' },
-    { kind: 'out', text: '{ "id": "9a2f…", "status": "draft" }' },
+    { kind: 'out', text: '{"id":"9a2f…","slug":"…","status":"draft", …}' },
     BLANK,
     { kind: 'comment', text: '# exit code 5 = conflict or locked · 3 = auth' },
   ],
@@ -115,7 +127,7 @@ export default function CliTerminal() {
               tabIndex={selected ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
               onKeyDown={handleKeyDown}
-              className={`border-b-2 px-3 py-2 text-xs sm:text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-400 ${
+              className={`flex min-h-11 items-center border-b-2 px-3 text-xs sm:text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-400 ${
                 selected
                   ? 'border-blue-400 text-white'
                   : 'border-transparent text-slate-400 hover:text-slate-200'

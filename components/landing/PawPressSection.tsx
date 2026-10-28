@@ -25,7 +25,7 @@ const FEATURES = [
   {
     icon: FiUsers,
     title: 'Role-based admin',
-    description: 'Supabase Auth keeps author, admin, and reader roles separate.',
+    description: 'Supabase Auth with master and admin roles; only admins can publish.',
   },
   {
     icon: FiTerminal,

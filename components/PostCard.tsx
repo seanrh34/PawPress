@@ -16,15 +16,15 @@ const dateFormatter = new Intl.DateTimeFormat('en-US', {
 });
 
 export default function PostCard({ post, featured = false }: PostCardProps) {
-  const publishedLabel = post.published_at
-    ? dateFormatter.format(new Date(post.published_at))
-    : null;
+  const published = post.published_at ? new Date(post.published_at) : null;
+  const publishedLabel =
+    published && !Number.isNaN(published.getTime()) ? dateFormatter.format(published) : null;
 
   return (
     <Link
       href={`/${post.slug}`}
-      className={`group flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white transition hover:-translate-y-1 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
-        featured ? 'md:col-span-2 md:flex-row lg:col-span-3' : ''
+      className={`group flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white transition motion-safe:hover:-translate-y-1 motion-safe:hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
+        featured ? 'md:col-span-2 md:min-h-[320px] md:flex-row lg:col-span-3' : ''
       }`}
     >
       {/* Featured Image */}
@@ -43,7 +43,7 @@ export default function PostCard({ post, featured = false }: PostCardProps) {
                 ? '(max-width: 768px) 100vw, 700px'
                 : '(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw'
             }
-            className="object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+            className="object-cover transition-transform duration-300 motion-safe:group-hover:scale-[1.02]"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 text-gray-400">
@@ -93,7 +93,10 @@ export default function PostCard({ post, featured = false }: PostCardProps) {
           )}
           <span className="inline-flex items-center gap-1 font-medium text-blue-600 group-hover:text-blue-700">
             Read more
-            <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">
+            <span
+              aria-hidden="true"
+              className="transition-transform motion-safe:group-hover:translate-x-0.5"
+            >
               →
             </span>
           </span>

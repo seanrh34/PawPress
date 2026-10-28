@@ -20,39 +20,60 @@ export default function Footer() {
           {/* Quick Links */}
           <div>
             <h3 className="text-white text-lg font-semibold mb-4">Quick Links</h3>
-            <ul className="space-y-2 text-sm">
+            <ul className="text-sm">
               <li>
-                <Link href="/#home" className="hover:text-white transition-colors">
+                <Link
+                  href="/#home"
+                  className="inline-flex min-h-11 items-center hover:text-white transition-colors"
+                >
                   Home
                 </Link>
               </li>
               <li>
-                <Link href="/#posts" className="hover:text-white transition-colors">
+                <Link
+                  href="/#posts"
+                  className="inline-flex min-h-11 items-center hover:text-white transition-colors"
+                >
                   Posts
                 </Link>
               </li>
               <li>
-                <Link href="/category" className="hover:text-white transition-colors">
+                <Link
+                  href="/category"
+                  className="inline-flex min-h-11 items-center hover:text-white transition-colors"
+                >
                   Categories
                 </Link>
               </li>
               <li>
-                <Link href="/#pawpress" className="hover:text-white transition-colors">
+                <Link
+                  href="/#pawpress"
+                  className="inline-flex min-h-11 items-center hover:text-white transition-colors"
+                >
                   Build Your Own
                 </Link>
               </li>
               <li>
-                <Link href="/#cli" className="hover:text-white transition-colors">
+                <Link
+                  href="/#cli"
+                  className="inline-flex min-h-11 items-center hover:text-white transition-colors"
+                >
                   CLI
                 </Link>
               </li>
               <li>
-                <Link href="/#contact" className="hover:text-white transition-colors">
+                <Link
+                  href="/#contact"
+                  className="inline-flex min-h-11 items-center hover:text-white transition-colors"
+                >
                   Contact
                 </Link>
               </li>
               <li>
-                <Link href="/admin" className="hover:text-white transition-colors">
+                <Link
+                  href="/admin"
+                  className="inline-flex min-h-11 items-center hover:text-white transition-colors"
+                >
                   Admin Dashboard
                 </Link>
               </li>
@@ -65,10 +86,10 @@ export default function Footer() {
             <p className="text-sm mb-4">
               Let&apos;s stay in touch! Reach out through any of these channels.
             </p>
-            <div className="flex gap-4 text-2xl">
+            <div className="flex gap-3">
               <a
                 href="mailto:hello@34cats.com"
-                className="hover:text-blue-400 transition-colors"
+                className="flex h-11 w-11 items-center justify-center text-2xl hover:text-blue-400 transition-colors"
                 aria-label="Email"
               >
                 <FaEnvelope aria-hidden="true" />
@@ -77,7 +98,7 @@ export default function Footer() {
                 href="https://www.linkedin.com/in/sean-hardjanto-0b8874139/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-blue-400 transition-colors"
+                className="flex h-11 w-11 items-center justify-center text-2xl hover:text-blue-400 transition-colors"
                 aria-label="LinkedIn"
               >
                 <FaLinkedin aria-hidden="true" />
@@ -86,7 +107,7 @@ export default function Footer() {
                 href="https://github.com/seanrh34"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-blue-400 transition-colors"
+                className="flex h-11 w-11 items-center justify-center text-2xl hover:text-blue-400 transition-colors"
                 aria-label="GitHub"
               >
                 <FaGithub aria-hidden="true" />
