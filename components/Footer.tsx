@@ -24,7 +24,7 @@ export default function Footer() {
               <li>
                 <Link
                   href="/#home"
-                  className="inline-flex min-h-11 items-center hover:text-white transition-colors"
+                  className="inline-flex min-h-11 items-center sm:min-h-0 sm:py-1 hover:text-white transition-colors"
                 >
                   Home
                 </Link>
@@ -32,7 +32,7 @@ export default function Footer() {
               <li>
                 <Link
                   href="/#posts"
-                  className="inline-flex min-h-11 items-center hover:text-white transition-colors"
+                  className="inline-flex min-h-11 items-center sm:min-h-0 sm:py-1 hover:text-white transition-colors"
                 >
                   Posts
                 </Link>
@@ -40,7 +40,7 @@ export default function Footer() {
               <li>
                 <Link
                   href="/category"
-                  className="inline-flex min-h-11 items-center hover:text-white transition-colors"
+                  className="inline-flex min-h-11 items-center sm:min-h-0 sm:py-1 hover:text-white transition-colors"
                 >
                   Categories
                 </Link>
@@ -48,7 +48,7 @@ export default function Footer() {
               <li>
                 <Link
                   href="/#pawpress"
-                  className="inline-flex min-h-11 items-center hover:text-white transition-colors"
+                  className="inline-flex min-h-11 items-center sm:min-h-0 sm:py-1 hover:text-white transition-colors"
                 >
                   Build Your Own
                 </Link>
@@ -56,7 +56,7 @@ export default function Footer() {
               <li>
                 <Link
                   href="/#cli"
-                  className="inline-flex min-h-11 items-center hover:text-white transition-colors"
+                  className="inline-flex min-h-11 items-center sm:min-h-0 sm:py-1 hover:text-white transition-colors"
                 >
                   CLI
                 </Link>
@@ -64,7 +64,7 @@ export default function Footer() {
               <li>
                 <Link
                   href="/#contact"
-                  className="inline-flex min-h-11 items-center hover:text-white transition-colors"
+                  className="inline-flex min-h-11 items-center sm:min-h-0 sm:py-1 hover:text-white transition-colors"
                 >
                   Contact
                 </Link>
@@ -72,7 +72,7 @@ export default function Footer() {
               <li>
                 <Link
                   href="/admin"
-                  className="inline-flex min-h-11 items-center hover:text-white transition-colors"
+                  className="inline-flex min-h-11 items-center sm:min-h-0 sm:py-1 hover:text-white transition-colors"
                 >
                   Admin Dashboard
                 </Link>

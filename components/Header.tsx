@@ -64,7 +64,7 @@ export default function Header() {
             type="button"
             onClick={() => setIsOpen((open) => !open)}
             aria-expanded={isOpen}
-            aria-controls="mobile-menu"
+            aria-controls={isOpen ? 'mobile-menu' : undefined}
             aria-label={isOpen ? 'Close menu' : 'Open menu'}
             className="lg:hidden flex h-11 w-11 items-center justify-center text-gray-600 hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >

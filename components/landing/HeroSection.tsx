@@ -59,8 +59,8 @@ export default function HeroSection() {
             </div>
           </div>
 
-          {/* Logo card */}
-          <div className="flex justify-center lg:justify-end">
+          {/* Logo card (lg and up; the header already shows the logo on smaller screens) */}
+          <div className="hidden lg:flex justify-end">
             <div className="rounded-2xl border border-gray-200 bg-white/70 p-6 sm:p-10 backdrop-blur-sm">
               <Image
                 src="/34cats_main_light.png"

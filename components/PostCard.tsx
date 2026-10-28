@@ -24,13 +24,13 @@ export default function PostCard({ post, featured = false }: PostCardProps) {
     <Link
       href={`/${post.slug}`}
       className={`group flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white transition motion-safe:hover:-translate-y-1 motion-safe:hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
-        featured ? 'md:col-span-2 md:min-h-[320px] md:flex-row lg:col-span-3' : ''
+        featured ? 'md:col-span-2 lg:col-span-3 lg:min-h-[320px] lg:flex-row' : ''
       }`}
     >
       {/* Featured Image */}
       <div
         className={`relative w-full shrink-0 overflow-hidden bg-gray-100 aspect-[16/9] ${
-          featured ? 'md:aspect-auto md:w-[55%]' : ''
+          featured ? 'lg:aspect-auto lg:w-[55%]' : ''
         }`}
       >
         {post.featured_image_url ? (
@@ -69,21 +69,21 @@ export default function PostCard({ post, featured = false }: PostCardProps) {
 
         <h3
           className={`font-semibold text-gray-900 line-clamp-2 ${
-            featured ? 'text-2xl md:text-3xl' : 'text-xl'
+            featured ? 'text-2xl lg:text-3xl' : 'text-xl'
           }`}
         >
           {post.title}
         </h3>
 
         <p
-          className={`mt-2 flex-1 text-gray-600 ${
-            featured ? 'line-clamp-3 md:line-clamp-4' : 'line-clamp-3'
+          className={`mt-2 text-gray-600 ${
+            featured ? 'line-clamp-3 lg:line-clamp-4' : 'line-clamp-3'
           }`}
         >
           {post.excerpt}
         </p>
 
-        <div className="mt-4 flex items-center justify-between gap-3 text-sm">
+        <div className="mt-auto pt-4 flex items-center justify-between gap-3 text-sm">
           {publishedLabel ? (
             <time dateTime={post.published_at ?? undefined} className="text-gray-500">
               {publishedLabel}

@@ -122,11 +122,14 @@ export default function CliSection() {
                 key={step.title}
                 className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900 p-6"
               >
-                <div className="flex items-center gap-3">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-sm font-semibold text-blue-400">
-                    {index + 1}
-                  </span>
-                  <h4 className="font-semibold text-white">{step.title}</h4>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-sm font-semibold text-blue-400">
+                      {index + 1}
+                    </span>
+                    <h4 className="font-semibold text-white">{step.title}</h4>
+                  </div>
+                  {step.code && <CopyButton text={step.code} />}
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-slate-300">{step.body}</p>
                 {step.chips && (
@@ -142,14 +145,9 @@ export default function CliSection() {
                   </div>
                 )}
                 {step.code && (
-                  <div className="relative mt-4">
-                    <pre className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950 p-3 pr-16 pt-14 font-mono text-xs leading-relaxed text-slate-200">
-                      <code>{step.code}</code>
-                    </pre>
-                    <div className="absolute right-2 top-2">
-                      <CopyButton text={step.code} />
-                    </div>
-                  </div>
+                  <pre className="mt-4 overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-slate-800 bg-slate-950 p-3 font-mono text-xs leading-relaxed text-slate-200">
+                    <code>{step.code}</code>
+                  </pre>
                 )}
               </div>
             ))}

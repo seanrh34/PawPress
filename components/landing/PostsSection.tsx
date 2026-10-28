@@ -80,7 +80,7 @@ export default function PostsSection({ posts }: PostsSectionProps) {
                 </p>
 
                 {/* Pagination Buttons */}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-center gap-2">
                   {/* Previous Button */}
                   <button
                     onClick={goToPrevious}
@@ -91,7 +91,7 @@ export default function PostsSection({ posts }: PostsSectionProps) {
                   </button>
 
                   {/* Page Numbers */}
-                  <div className="flex gap-1">
+                  <div className="flex flex-wrap justify-center gap-1">
                     {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNumber) => {
                       // Show all pages if total pages <= 7
                       // Otherwise show first, last, current, and adjacent pages
