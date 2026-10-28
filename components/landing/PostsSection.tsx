@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import PostCard from '@/components/PostCard';
+import { Cat } from '@/components/brand/cat';
+import { Reveal } from '@/components/motion/reveal';
 import { Post } from '@/lib/types';
 
 interface PostsSectionProps {
@@ -41,23 +43,20 @@ export default function PostsSection({ posts }: PostsSectionProps) {
   };
 
   return (
-    <section id="posts" className="bg-gray-50 py-16 sm:py-20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-10 sm:mb-12 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <section id="posts" className="px-5 py-16 md:px-8 md:py-24">
+      <div className="mx-auto max-w-6xl">
+        <Reveal className="mb-10 md:mb-14 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">Latest posts</h2>
-            <p className="mt-2 max-w-xl text-gray-600">
-              Thoughts, experiences, and insights on web development, technology, and design.
-            </p>
+            <p className="portal-label text-signal">[01] Latest writing</p>
+            <h2 className="portal-heading mt-3 text-4xl md:text-6xl">Latest posts</h2>
           </div>
-          <Link
-            href="/category"
-            className="inline-flex min-h-11 w-fit items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-          >
-            All categories
-            <span aria-hidden="true">→</span>
-          </Link>
-        </div>
+          <div className="sm:text-right">
+            <p className="text-sm text-copy-muted">Newest first.</p>
+            <Link href="/category" className="mt-1 inline-flex min-h-11 items-center gap-1 text-sm font-medium text-signal hover:underline">
+              All categories <span aria-hidden="true">→</span>
+            </Link>
+          </div>
+        </Reveal>
 
         {posts.length > 0 ? (
           <>
@@ -66,6 +65,7 @@ export default function PostsSection({ posts }: PostsSectionProps) {
                 <PostCard
                   key={post.id}
                   post={post}
+                  index={index}
                   featured={currentPage === 1 && index === 0}
                 />
               ))}
@@ -73,25 +73,23 @@ export default function PostsSection({ posts }: PostsSectionProps) {
 
             {/* Pagination Controls */}
             {totalPages > 1 && (
-              <div className="mt-10 flex flex-col sm:flex-row items-center justify-between gap-4">
-                {/* Page Info */}
-                <p className="text-sm text-gray-600">
-                  Showing {indexOfFirstPost + 1} - {Math.min(indexOfLastPost, posts.length)} of {posts.length} posts
+              <div className="mt-10 flex flex-col items-center gap-4">
+                <p className="portal-label text-copy-muted">
+                  Showing {indexOfFirstPost + 1} to {Math.min(indexOfLastPost, posts.length)} of {posts.length}
                 </p>
 
-                {/* Pagination Buttons */}
-                <div className="flex flex-wrap items-center justify-center gap-2">
+                <div className="flex max-w-full flex-wrap items-center justify-center gap-2">
                   {/* Previous Button */}
                   <button
                     onClick={goToPrevious}
                     disabled={currentPage === 1}
-                    className="inline-flex min-h-11 items-center px-4 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                    className="portal-button portal-button-secondary rounded-full disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Previous
                   </button>
 
                   {/* Page Numbers */}
-                  <div className="flex flex-wrap justify-center gap-1">
+                  <div className="flex flex-wrap justify-center gap-2">
                     {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNumber) => {
                       // Show all pages if total pages <= 7
                       // Otherwise show first, last, current, and adjacent pages
@@ -107,7 +105,7 @@ export default function PostsSection({ posts }: PostsSectionProps) {
 
                       if (showEllipsis) {
                         return (
-                          <span key={pageNumber} className="px-3 py-2 text-gray-500">
+                          <span key={pageNumber} className="portal-label flex min-h-11 items-center px-1 text-copy-muted">
                             …
                           </span>
                         );
@@ -120,10 +118,8 @@ export default function PostsSection({ posts }: PostsSectionProps) {
                           key={pageNumber}
                           onClick={() => goToPage(pageNumber)}
                           aria-current={currentPage === pageNumber ? 'page' : undefined}
-                          className={`min-w-[44px] min-h-[44px] px-2 inline-flex items-center justify-center text-sm font-medium rounded-lg transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
-                            currentPage === pageNumber
-                              ? 'bg-blue-600 text-white'
-                              : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
+                          className={`portal-button rounded-full ${
+                            currentPage === pageNumber ? 'portal-button-primary' : 'portal-button-secondary'
                           }`}
                         >
                           {pageNumber}
@@ -136,7 +132,7 @@ export default function PostsSection({ posts }: PostsSectionProps) {
                   <button
                     onClick={goToNext}
                     disabled={currentPage === totalPages}
-                    className="inline-flex min-h-11 items-center px-4 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                    className="portal-button portal-button-secondary rounded-full disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Next
                   </button>
@@ -145,22 +141,14 @@ export default function PostsSection({ posts }: PostsSectionProps) {
             )}
           </>
         ) : (
-          <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-16 text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13h-4a2 2 0 01-2-2V9a2 2 0 012-2h4a2 2 0 012 2v10a2 2 0 01-2 2z"
-                />
-              </svg>
+          <Reveal variant="tilt" tilt="-1deg" className="mx-auto max-w-xl">
+            <div className="note-card relative rounded-panel border border-rail-strong bg-platform-raised px-7 py-10 pt-12 text-center md:p-12">
+              <span className="note-tape" aria-hidden="true" />
+              <Cat className="mx-auto w-24" still />
+              <h3 className="portal-heading mt-4 text-2xl">Nothing published yet.</h3>
+              <p className="mt-2 text-copy-muted">Check back soon.</p>
             </div>
-            <h3 className="text-xl font-semibold text-gray-900">No posts yet</h3>
-            <p className="mx-auto mt-2 max-w-md text-gray-600">
-              Nothing published here so far. Check back soon for new articles and updates.
-            </p>
-          </div>
+          </Reveal>
         )}
       </div>
     </section>

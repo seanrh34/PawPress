@@ -1,11 +1,16 @@
 import Link from 'next/link';
-import Image from 'next/image';
+import { BrowserFrame } from '@/components/shared/browser-frame';
+import { Bracket } from '@/components/brand/bracket';
 import { Post } from '@/lib/types';
 
 interface PostCardProps {
   post: Post;
   featured?: boolean;
+  /** Alternates the tinted image panel and frame tilt between cards. */
+  index?: number;
 }
+
+const TINT_CYCLE = ['bg-butter', 'bg-lilac', 'bg-sage', 'bg-sky'] as const;
 
 // Fixed locale + timeZone so server and client render the same string (no hydration mismatch).
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
@@ -15,91 +20,63 @@ const dateFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: 'UTC',
 });
 
-export default function PostCard({ post, featured = false }: PostCardProps) {
+export default function PostCard({ post, featured = false, index }: PostCardProps) {
   const published = post.published_at ? new Date(post.published_at) : null;
   const publishedLabel =
     published && !Number.isNaN(published.getTime()) ? dateFormatter.format(published) : null;
+  const tint = index === undefined ? 'bg-sky' : TINT_CYCLE[index % TINT_CYCLE.length];
+  const rotate = index === undefined ? -1.5 : index % 2 ? 1.5 : -1.5;
 
   return (
     <Link
       href={`/${post.slug}`}
-      className={`group flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white transition motion-safe:hover:-translate-y-1 motion-safe:hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
-        featured ? 'md:col-span-2 lg:col-span-3 lg:min-h-[320px] lg:flex-row' : ''
-      }`}
+      className={`app-card group relative block h-full ${featured ? 'md:col-span-2 lg:col-span-3' : ''}`}
     >
-      {/* Featured Image */}
-      <div
-        className={`relative w-full shrink-0 overflow-hidden bg-gray-100 aspect-[16/9] ${
-          featured ? 'lg:aspect-auto lg:w-[55%]' : ''
-        }`}
-      >
-        {post.featured_image_url ? (
-          <Image
-            src={post.featured_image_url}
-            alt=""
-            fill
-            sizes={
-              featured
-                ? '(max-width: 768px) 100vw, 700px'
-                : '(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw'
-            }
-            className="object-cover transition-transform duration-300 motion-safe:group-hover:scale-[1.02]"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 text-gray-400">
-            <svg className="w-14 h-14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
-          </div>
-        )}
-      </div>
-
-      {/* Content */}
-      <div className="flex flex-1 flex-col p-5 sm:p-6">
-        {post.category && (
-          <span className="mb-3 inline-flex w-fit items-center rounded-full border border-blue-100 bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
-            {post.category.name}
-          </span>
-        )}
-
-        <h3
-          className={`font-semibold text-gray-900 line-clamp-2 ${
-            featured ? 'text-2xl lg:text-3xl' : 'text-xl'
-          }`}
-        >
-          {post.title}
-        </h3>
-
-        <p
-          className={`mt-2 text-gray-600 ${
-            featured ? 'line-clamp-3 lg:line-clamp-4' : 'line-clamp-3'
-          }`}
-        >
-          {post.excerpt}
-        </p>
-
-        <div className="mt-auto pt-4 flex items-center justify-between gap-3 text-sm">
-          {publishedLabel ? (
-            <time dateTime={post.published_at ?? undefined} className="text-gray-500">
-              {publishedLabel}
-            </time>
-          ) : (
-            <span />
+      <div className={`relative flex h-full flex-col overflow-hidden rounded-panel border border-rail bg-platform-raised ${featured ? 'lg:flex-row' : ''}`}>
+        {/* Tinted image panel with the featured image in browser chrome */}
+        <div className={`relative ${tint} px-6 pb-9 pt-10 md:px-9 ${featured ? 'lg:w-[55%]' : ''}`}>
+          {featured && (
+            <Bracket shape="corner" className="card-corner absolute left-4 top-4 size-8" stroke="var(--text)" strokeWidth={3.5} />
           )}
-          <span className="inline-flex items-center gap-1 font-medium text-blue-600 group-hover:text-blue-700">
-            Read more
-            <span
-              aria-hidden="true"
-              className="transition-transform motion-safe:group-hover:translate-x-0.5"
-            >
-              →
+          <BrowserFrame
+            src={post.featured_image_url ?? '/images/pawpress-screenshot.png'}
+            alt=""
+            host={`blog.34cats.com/${post.slug}`}
+            rotate={rotate}
+            sizes={featured ? '(max-width: 1024px) 100vw, 700px' : '(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw'}
+          />
+        </div>
+
+        {/* Body */}
+        <div className="flex flex-1 flex-col p-6 md:p-8">
+          {post.category && (
+            <span className="portal-label w-fit rounded-full border border-copy px-2.5 py-1 text-copy">
+              {post.category.name}
             </span>
-          </span>
+          )}
+
+          <h3
+            className={`portal-heading mt-4 line-clamp-2 break-words text-copy ${
+              featured ? 'text-3xl md:text-4xl' : 'text-2xl'
+            }`}
+          >
+            {post.title}
+          </h3>
+
+          <p className="mt-2 line-clamp-3 flex-1 text-copy-muted">{post.excerpt}</p>
+
+          <div className="mt-auto flex items-center justify-between gap-3 pt-5">
+            {publishedLabel ? (
+              <time dateTime={post.published_at ?? undefined} className="font-mono text-xs text-copy-muted">
+                {publishedLabel}
+              </time>
+            ) : (
+              <span />
+            )}
+            <span className="inline-flex items-center gap-1 text-sm font-medium text-signal">
+              Read <span aria-hidden="true" className="transition-transform motion-safe:group-hover:translate-x-0.5">→</span>
+            </span>
+          </div>
         </div>
       </div>
     </Link>
