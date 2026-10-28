@@ -3,6 +3,7 @@ import { restCompare, restEq } from "@/lib/supabaseRest";
 import HeroSection from "@/components/landing/HeroSection";
 import PostsSection from "@/components/landing/PostsSection";
 import PawPressSection from "@/components/landing/PawPressSection";
+import CliSection from "@/components/landing/CliSection";
 import ContactSection from "@/components/landing/ContactSection";
 
 async function getPublishedPosts(): Promise<Post[]> {
@@ -66,6 +67,7 @@ export default async function Home() {
       <HeroSection />
       <PostsSection posts={posts} />
       <PawPressSection />
+      <CliSection />
       <ContactSection />
     </div>
   );
