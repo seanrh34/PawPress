@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import Link from 'next/link';
 import PostCard from '@/components/PostCard';
 import { Post } from '@/lib/types';
 
@@ -9,35 +10,22 @@ interface PostsSectionProps {
 }
 
 export default function PostsSection({ posts }: PostsSectionProps) {
-  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedPage, setSelectedPage] = useState(1);
   const postsPerPage = 6; // Always 6 posts per page
 
   // Calculate pagination values
   const totalPages = Math.ceil(posts.length / postsPerPage);
+  // Derive the active page during render so a shrinking list can never leave
+  // us on a page that no longer exists (no effect needed).
+  const currentPage = Math.min(selectedPage, Math.max(totalPages, 1));
   const indexOfLastPost = currentPage * postsPerPage;
   const indexOfFirstPost = indexOfLastPost - postsPerPage;
   const currentPosts = posts.slice(indexOfFirstPost, indexOfLastPost);
 
-  // Reset to page 1 if current page exceeds total pages after resize
-  useEffect(() => {
-    if (currentPage > totalPages && totalPages > 0) {
-      setCurrentPage(1);
-    }
-  }, [totalPages, currentPage]);
-
   const goToPage = (pageNumber: number) => {
-    setCurrentPage(pageNumber);
-    // Scroll to posts section
-    const element = document.getElementById('posts');
-    if (element) {
-      const navbarHeight = 64;
-      const elementPosition = element.getBoundingClientRect().top + window.scrollY;
-      const offsetPosition = elementPosition - navbarHeight;
-      window.scrollTo({
-        top: offsetPosition,
-        behavior: 'smooth'
-      });
-    }
+    setSelectedPage(pageNumber);
+    // Offset from the sticky header is handled by CSS scroll-margin-top.
+    document.getElementById('posts')?.scrollIntoView();
   };
 
   const goToPrevious = () => {
@@ -53,33 +41,43 @@ export default function PostsSection({ posts }: PostsSectionProps) {
   };
 
   return (
-    <section id="posts" className="bg-gray-50 py-20">
+    <section id="posts" className="bg-gray-50 py-16 sm:py-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Latest Posts
-          </h2>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Here is where I will write about my thoughts, experiences, and insights. Stay updated with fresh content 
-            covering web development, technology trends, and other topics that I find interesting.
-          </p>
+        <div className="mb-10 sm:mb-12 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">Latest posts</h2>
+            <p className="mt-2 max-w-xl text-gray-600">
+              Thoughts, experiences, and insights on web development, technology, and design.
+            </p>
+          </div>
+          <Link
+            href="/category"
+            className="inline-flex w-fit items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          >
+            All categories
+            <span aria-hidden="true">→</span>
+          </Link>
         </div>
 
         {posts.length > 0 ? (
           <>
-            <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3 mb-12">
-              {currentPosts.map((post) => (
-                <PostCard key={post.id} post={post} />
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {currentPosts.map((post, index) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  featured={currentPage === 1 && index === 0}
+                />
               ))}
             </div>
-            
+
             {/* Pagination Controls */}
             {totalPages > 1 && (
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="mt-10 flex flex-col sm:flex-row items-center justify-between gap-4">
                 {/* Page Info */}
-                <div className="text-sm text-gray-600">
+                <p className="text-sm text-gray-600">
                   Showing {indexOfFirstPost + 1} - {Math.min(indexOfLastPost, posts.length)} of {posts.length} posts
-                </div>
+                </p>
 
                 {/* Pagination Buttons */}
                 <div className="flex items-center gap-2">
@@ -87,7 +85,7 @@ export default function PostsSection({ posts }: PostsSectionProps) {
                   <button
                     onClick={goToPrevious}
                     disabled={currentPage === 1}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
                   >
                     Previous
                   </button>
@@ -97,7 +95,7 @@ export default function PostsSection({ posts }: PostsSectionProps) {
                     {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNumber) => {
                       // Show all pages if total pages <= 7
                       // Otherwise show first, last, current, and adjacent pages
-                      const showPage = 
+                      const showPage =
                         totalPages <= 7 ||
                         pageNumber === 1 ||
                         pageNumber === totalPages ||
@@ -110,7 +108,7 @@ export default function PostsSection({ posts }: PostsSectionProps) {
                       if (showEllipsis) {
                         return (
                           <span key={pageNumber} className="px-3 py-2 text-gray-500">
-                            ...
+                            …
                           </span>
                         );
                       }
@@ -121,7 +119,8 @@ export default function PostsSection({ posts }: PostsSectionProps) {
                         <button
                           key={pageNumber}
                           onClick={() => goToPage(pageNumber)}
-                          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer ${
+                          aria-current={currentPage === pageNumber ? 'page' : undefined}
+                          className={`min-w-[44px] min-h-[44px] px-2 inline-flex items-center justify-center text-sm font-medium rounded-lg transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
                             currentPage === pageNumber
                               ? 'bg-blue-600 text-white'
                               : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
@@ -137,7 +136,7 @@ export default function PostsSection({ posts }: PostsSectionProps) {
                   <button
                     onClick={goToNext}
                     disabled={currentPage === totalPages}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
                   >
                     Next
                   </button>
@@ -146,14 +145,20 @@ export default function PostsSection({ posts }: PostsSectionProps) {
             )}
           </>
         ) : (
-          <div className="text-center py-16 bg-white rounded-xl border-2 border-dashed border-gray-300">
-            <div className="text-6xl mb-4">📝</div>
-            <h3 className="text-2xl font-semibold text-gray-700 mb-2">No Posts Yet</h3>
-            <p className="text-gray-600 mb-6">
-              Be the first to publish content! Our admin dashboard makes it easy to create and share your stories.
-            </p>
-            <p className="text-sm text-gray-500">
-              Check back soon for new articles and updates.
+          <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-16 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13h-4a2 2 0 01-2-2V9a2 2 0 012-2h4a2 2 0 012 2v10a2 2 0 01-2 2z"
+                />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900">No posts yet</h3>
+            <p className="mx-auto mt-2 max-w-md text-gray-600">
+              Nothing published here so far. Check back soon for new articles and updates.
             </p>
           </div>
         )}
