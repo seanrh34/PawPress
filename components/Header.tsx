@@ -1,114 +1,79 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter, usePathname } from 'next/navigation';
+
+const NAV_LINKS = [
+  { href: '/#home', label: 'Home' },
+  { href: '/#posts', label: 'Posts' },
+  { href: '/category', label: 'Categories' },
+  { href: '/#pawpress', label: 'Build Your Own' },
+  { href: '/#cli', label: 'CLI' },
+  { href: '/#contact', label: 'Contact' },
+] as const;
 
 export default function Header() {
   const [isOpen, setIsOpen] = useState(false);
-  const router = useRouter();
-  const pathname = usePathname();
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
 
-  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
-    e.preventDefault();
-    // Close mobile menu first
-    setIsOpen(false);
-    
-    // Extract the hash from the href (e.g., "/#home" -> "home")
-    const hash = href.includes('#') ? href.split('#')[1] : '';
-    
-    // Check if we're on the homepage
-    const isHomepage = pathname === '/';
-    
-    if (hash) {
-      if (!isHomepage) {
-        // If not on homepage, navigate there first, then scroll
-        router.push(`/#${hash}`);
-      } else {
-        // If already on homepage, just scroll to the section
-        setTimeout(() => {
-          const element = document.getElementById(hash);
-          if (element) {
-            const navbarHeight = 64; // h-16 = 64px (fixed header height)
-            const elementPosition = element.getBoundingClientRect().top + window.scrollY;
-            const offsetPosition = elementPosition - navbarHeight;
-            
-            window.scrollTo({
-              top: offsetPosition,
-              behavior: "smooth"
-            });
-          }
-        }, 100);
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+        menuButtonRef.current?.focus();
       }
-    }
-  };
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isOpen]);
 
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div className="flex items-center justify-between h-16">
+    <header className="sticky top-0 z-50 border-b border-gray-200 bg-white/80 backdrop-blur">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center">
-            <Image 
-              src="/34cats_main_light.png" 
-              alt="34cats Logo" 
-              width={150} 
+          <Link href="/" className="flex items-center" aria-label="34cats home">
+            <Image
+              src="/34cats_main_light.png"
+              alt="34cats Logo"
+              width={150}
               height={40}
-              className="h-8 sm:h-10 md:h-12 lg:h-14 w-auto"
+              className="h-8 sm:h-10 w-auto"
+              priority
             />
           </Link>
 
-          {/* Desktop Navigation Links */}
-          <nav className="hidden md:flex items-center gap-8">
-            <Link 
-              href="/#home"
-              onClick={(e) => handleLinkClick(e, '/#home')}
-              className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
-            >
-              Home
-            </Link>
-            <Link 
-              href="/#posts"
-              onClick={(e) => handleLinkClick(e, '/#posts')}
-              className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
-            >
-              Posts
-            </Link>
-            <Link 
-              href="/category"
-              className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
-            >
-              Categories
-            </Link>
-            <Link 
-              href="/#pawpress"
-              onClick={(e) => handleLinkClick(e, '/#pawpress')}
-              className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
-            >
-              Build Your Own
-            </Link>
-            <Link 
-              href="/#contact"
-              onClick={(e) => handleLinkClick(e, '/#contact')}
-              className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
-            >
-              Contact
-            </Link>
+          {/* Desktop Navigation Links (lg and up) */}
+          <nav className="hidden lg:flex items-center gap-7" aria-label="Main navigation">
+            {NAV_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                {link.label}
+              </Link>
+            ))}
           </nav>
 
           {/* Mobile Menu Button */}
-          <button 
-            onClick={() => setIsOpen(!isOpen)}
-            className="md:hidden p-2 text-gray-600 hover:text-gray-900"
-            aria-label="Toggle menu"
+          <button
+            ref={menuButtonRef}
+            type="button"
+            onClick={() => setIsOpen((open) => !open)}
+            aria-expanded={isOpen}
+            aria-controls="mobile-menu"
+            aria-label={isOpen ? 'Close menu' : 'Open menu'}
+            className="lg:hidden flex h-11 w-11 items-center justify-center text-gray-600 hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >
             {isOpen ? (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             ) : (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             )}
@@ -117,43 +82,18 @@ export default function Header() {
 
         {/* Mobile Navigation Menu */}
         {isOpen && (
-          <nav className="md:hidden py-4 border-t border-gray-200">
-            <div className="flex flex-col space-y-4">
-              <Link 
-                href="/#home"
-                onClick={(e) => handleLinkClick(e, '/#home')}
-                className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                Home
-              </Link>
-              <Link 
-                href="/#posts"
-                onClick={(e) => handleLinkClick(e, '/#posts')}
-                className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                Posts
-              </Link>
-              <Link 
-                href="/category"
-                onClick={() => setIsOpen(false)}
-                className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                Categories
-              </Link>
-              <Link 
-                href="/#pawpress"
-                onClick={(e) => handleLinkClick(e, '/#pawpress')}
-                className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                Build Your Own
-              </Link>
-              <Link 
-                href="/#contact"
-                onClick={(e) => handleLinkClick(e, '/#contact')}
-                className="sm:text-base md:text-lg lg:text-xl font-medium text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                Contact
-              </Link>
+          <nav id="mobile-menu" className="lg:hidden border-t border-gray-200 pb-3" aria-label="Mobile navigation">
+            <div className="flex flex-col">
+              {NAV_LINKS.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setIsOpen(false)}
+                  className="flex min-h-[44px] items-center px-2 text-base font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-colors"
+                >
+                  {link.label}
+                </Link>
+              ))}
             </div>
           </nav>
         )}

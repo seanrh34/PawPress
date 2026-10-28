@@ -19,14 +19,16 @@
   }
 }
 
-/* Smooth Scrolling */
-html {
-  scroll-behavior: smooth;
+/* Smooth Scrolling (respect reduced motion) */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 /* Offset for sticky header when scrolling to anchors */
 section[id] {
-  scroll-margin-top: 5rem; /* 80px - accounts for 64px header + small buffer */
+  scroll-margin-top: 4.5rem; /* 64px header + 8px breathing room */
 }
 
 body {
