@@ -1,18 +1,29 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Instrument_Sans, JetBrains_Mono } from "next/font/google";
 import "./styles/globals.css";
 import "./styles/editor.css";
 import ConditionalHeader from "@/components/ConditionalHeader";
 import Footer from "@/components/Footer";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const bricolage = Bricolage_Grotesque({
   subsets: ["latin"],
+  axes: ["opsz"],
+  variable: "--font-bricolage",
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const instrument = Instrument_Sans({
   subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-instrument",
+  display: "swap",
+});
+
+const jetbrains = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-jetbrains",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -26,10 +37,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${bricolage.variable} ${instrument.variable} ${jetbrains.variable}`}
+    >
+      <head>
+        {/* Reveal animations hide content only once JS is known to run. */}
+        <script dangerouslySetInnerHTML={{ __html: 'document.documentElement.dataset.js="1"' }} />
+      </head>
+      <body className="bg-platform text-copy antialiased">
         <ConditionalHeader />
         <main className="min-h-screen">
           {children}
