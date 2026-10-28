@@ -19,7 +19,7 @@ export default function CopyButton({ text }: { text: string }) {
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Clipboard unavailable (e.g. insecure context) — nothing to do.
+      // Clipboard unavailable (e.g. insecure context): nothing to do.
     }
   };
 
@@ -27,7 +27,7 @@ export default function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={handleCopy}
-      className="flex min-h-11 min-w-11 items-center justify-center rounded-md border border-slate-700 bg-slate-900 px-3 text-xs font-medium text-slate-300 transition-colors hover:border-slate-500 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
+      className="portal-button portal-button-inverse-outline rounded-full text-xs"
     >
       <span aria-live="polite">{copied ? 'Copied' : 'Copy'}</span>
     </button>

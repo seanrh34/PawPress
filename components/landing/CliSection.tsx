@@ -1,61 +1,33 @@
-import { FiFileText, FiKey, FiLock, FiClock, FiCode, FiEye, FiArrowRight } from 'react-icons/fi';
+import type { ReactNode } from 'react';
 import CliTerminal from './CliTerminal';
 import CopyButton from './CopyButton';
 
-function InlineCode({ children }: { children: React.ReactNode }) {
+function InlineCode({ children }: { children: ReactNode }) {
   return (
-    <code className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[0.875em] text-slate-200">
+    <code className="rounded bg-[#221e17] px-1.5 py-0.5 font-mono text-[0.875em] text-[#f3ecdf]">
       {children}
     </code>
   );
 }
 
 const HIGHLIGHTS = [
-  {
-    icon: FiFileText,
-    label: (
-      <>Pull → edit → push Markdown</>
-    ),
-  },
-  {
-    icon: FiKey,
-    label: (
-      <>Scoped, expiring tokens — least privilege; agents write drafts, humans publish</>
-    ),
-  },
-  {
-    icon: FiLock,
-    label: <>Edit locks + conflict detection</>,
-  },
-  {
-    icon: FiClock,
-    label: (
-      <>
-        Schedule posts with <InlineCode>--at</InlineCode>
-      </>
-    ),
-  },
-  {
-    icon: FiCode,
-    label: (
-      <>
-        <InlineCode>--json</InlineCode> output and stable exit codes 0–7
-      </>
-    ),
-  },
-  {
-    icon: FiEye,
-    label: (
-      <>
-        <InlineCode>--dry-run</InlineCode> to preview creates, pushes, updates and deletes
-      </>
-    ),
-  },
+  <>Pull → edit → push Markdown</>,
+  <>Scoped, expiring tokens: agents write drafts, humans publish</>,
+  <>Edit locks + conflict detection</>,
+  <>
+    Schedule posts with <InlineCode>--at</InlineCode>
+  </>,
+  <>
+    <InlineCode>--json</InlineCode> output and stable exit codes 0-7
+  </>,
+  <>
+    <InlineCode>--dry-run</InlineCode> to preview creates, pushes, updates and deletes
+  </>,
 ] as const;
 
 const QUICK_START: {
   title: string;
-  body: React.ReactNode;
+  body: ReactNode;
   code?: string;
   chips?: string[];
 }[] = [
@@ -68,8 +40,8 @@ const QUICK_START: {
     title: 'Create an API token',
     body: (
       <>
-        In your site&apos;s admin under API Tokens (<InlineCode>/admin/tokens</InlineCode>), pick
-        scopes and an expiry — the token is shown once. For agents, grant least privilege:
+        In your site&apos;s admin under API Tokens (<InlineCode>/admin/tokens</InlineCode>), pick scopes and an
+        expiry; the token is shown once. For agents, grant least privilege:
       </>
     ),
     chips: ['posts:read', 'posts:write', 'media:upload'],
@@ -83,27 +55,34 @@ const QUICK_START: {
 
 export default function CliSection() {
   return (
-    <section id="cli" className="bg-slate-950 py-16 sm:py-20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="cli" className="relative overflow-hidden bg-[#17140f] py-16 text-[#f3ecdf] sm:py-24">
+      {/* Faint dot grid */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        aria-hidden="true"
+        style={{
+          backgroundImage: 'radial-gradient(circle, rgba(243, 236, 223, 0.09) 1.2px, transparent 1.6px)',
+          backgroundSize: '26px 26px',
+        }}
+      />
+      <div className="relative mx-auto max-w-6xl px-5 md:px-8">
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
           {/* Copy */}
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-blue-400">
-              pawpress CLI
-            </p>
-            <h2 className="mt-3 text-3xl sm:text-4xl font-bold text-white">
+            <p className="portal-label text-[#ff6a4a]">[03] pawpress CLI</p>
+            <h2 className="portal-heading mt-3 text-4xl md:text-5xl">
               Write from your terminal. Or let your agent do it.
             </h2>
-            <p className="mt-4 max-w-xl text-slate-300">
-              Posts are Markdown + YAML front matter. A scoped API token, JSON output, and stable
-              exit codes make the CLI safe to hand to AI coding agents.
+            <p className="mt-4 max-w-xl text-[#f3ecdf]/80">
+              Posts are Markdown + YAML front matter. A scoped API token, JSON output, and stable exit codes make the
+              CLI safe to hand to AI coding agents.
             </p>
 
-            <ul className="mt-8 space-y-4">
+            <ul className="mt-8 space-y-3.5">
               {HIGHLIGHTS.map((highlight, index) => (
                 <li key={index} className="flex items-start gap-3">
-                  <highlight.icon className="mt-0.5 h-5 w-5 shrink-0 text-blue-400" aria-hidden="true" />
-                  <span className="text-slate-300">{highlight.label}</span>
+                  <span className="text-[#ff6a4a]" aria-hidden="true">✦</span>
+                  <span className="text-[#f3ecdf]/80">{highlight}</span>
                 </li>
               ))}
             </ul>
@@ -115,29 +94,25 @@ export default function CliSection() {
 
         {/* Get started */}
         <div className="mt-16 sm:mt-20">
-          <h3 className="text-2xl font-bold text-white">Get started in 3 steps</h3>
+          <h3 className="portal-heading text-2xl">Get started in 3 steps</h3>
           <div className="mt-6 grid gap-4 sm:gap-6 lg:grid-cols-3">
             {QUICK_START.map((step, index) => (
               <div
                 key={step.title}
-                className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900 p-6"
+                className="flex min-w-0 flex-col rounded-panel border border-[#3b3429] bg-[#221e17] p-6"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-sm font-semibold text-blue-400">
-                      {index + 1}
-                    </span>
-                    <h4 className="font-semibold text-white">{step.title}</h4>
-                  </div>
+                  <span className="portal-label text-[#ff6a4a]">{String(index + 1).padStart(2, '0')}</span>
                   {step.code && <CopyButton text={step.code} />}
                 </div>
-                <p className="mt-3 text-sm leading-relaxed text-slate-300">{step.body}</p>
+                <h4 className="portal-heading mt-2 text-lg">{step.title}</h4>
+                <p className="mt-2 text-sm leading-relaxed text-[#b5aa97]">{step.body}</p>
                 {step.chips && (
                   <div className="mt-4 flex flex-wrap gap-2">
                     {step.chips.map((chip) => (
                       <span
                         key={chip}
-                        className="rounded-md border border-slate-800 bg-slate-950 px-2 py-1 font-mono text-xs text-slate-200"
+                        className="rounded-md border border-[#3b3429] bg-[#17140f] px-2 py-1 font-mono text-xs text-[#f3ecdf]/80"
                       >
                         {chip}
                       </span>
@@ -145,7 +120,7 @@ export default function CliSection() {
                   </div>
                 )}
                 {step.code && (
-                  <pre className="mt-4 overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-slate-800 bg-slate-950 p-3 font-mono text-xs leading-relaxed text-slate-200">
+                  <pre className="mt-4 whitespace-pre-wrap break-all rounded-control border border-[#3b3429] bg-[#17140f] p-3 font-mono text-xs leading-relaxed text-[#f3ecdf]/80">
                     <code>{step.code}</code>
                   </pre>
                 )}
@@ -159,10 +134,10 @@ export default function CliSection() {
             href="https://github.com/seanrh34/PawPress/blob/master/docs/cli.md"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 font-medium text-blue-400 transition-colors hover:text-blue-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
+            className="inline-flex min-h-11 items-center gap-1.5 font-medium text-[#ff6a4a] transition-colors hover:text-[#ff8a70]"
           >
-            Read the full CLI guide
-            <FiArrowRight className="h-4 w-4" aria-hidden="true" />
+            Read the full CLI guide <span aria-hidden="true">↗</span>
+            <span className="sr-only"> (opens in a new tab)</span>
           </a>
         </div>
       </div>

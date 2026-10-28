@@ -72,7 +72,7 @@ const TAB_CONTENT: Record<TabId, TabLine[]> = {
 };
 
 const lineClass = (kind: TabLine['kind']) =>
-  kind === 'cmd' ? 'text-slate-100' : kind === 'comment' ? 'text-slate-400' : 'text-slate-300';
+  kind === 'cmd' ? 'text-[#f3ecdf]' : kind === 'comment' ? 'text-[#b5aa97]' : 'text-[#f3ecdf]/80';
 
 export default function CliTerminal() {
   const [activeTab, setActiveTab] = useState<TabId>('edit');
@@ -104,17 +104,17 @@ export default function CliTerminal() {
   };
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
+    <div className="overflow-hidden rounded-panel border border-[#3b3429] bg-[#221e17]">
       {/* Window chrome */}
-      <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-3">
-        <span className="h-3 w-3 rounded-full bg-red-500/80" aria-hidden="true" />
-        <span className="h-3 w-3 rounded-full bg-amber-400/80" aria-hidden="true" />
-        <span className="h-3 w-3 rounded-full bg-emerald-500/80" aria-hidden="true" />
-        <span className="ml-3 font-mono text-xs text-slate-400">~/blog</span>
+      <div className="flex items-center gap-2 border-b border-[#3b3429] px-4 py-3">
+        <span className="size-3 rounded-full bg-[#ff6a4a]" aria-hidden="true" />
+        <span className="size-3 rounded-full bg-butter" aria-hidden="true" />
+        <span className="size-3 rounded-full bg-sage" aria-hidden="true" />
+        <span className="ml-3 font-mono text-xs text-[#b5aa97]">~/blog</span>
       </div>
 
       {/* Tabs */}
-      <div role="tablist" aria-label="CLI examples" className="flex gap-1 border-b border-slate-800 px-2">
+      <div role="tablist" aria-label="CLI examples" className="flex gap-1 border-b border-[#3b3429] px-2">
         {TABS.map((tab) => {
           const selected = tab.id === activeTab;
           return (
@@ -131,10 +131,10 @@ export default function CliTerminal() {
               tabIndex={selected ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
               onKeyDown={handleKeyDown}
-              className={`flex min-h-11 items-center border-b-2 px-3 text-xs sm:text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-400 ${
+              className={`flex min-h-11 items-center border-b-2 px-3 font-mono text-xs uppercase tracking-[0.08em] transition-colors sm:text-sm ${
                 selected
-                  ? 'border-blue-400 text-white'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
+                  ? 'border-[#ff6a4a] text-[#f3ecdf]'
+                  : 'border-transparent text-[#b5aa97] hover:text-[#f3ecdf]'
               }`}
             >
               {tab.label}
@@ -152,14 +152,13 @@ export default function CliTerminal() {
           aria-labelledby={`cli-tab-${tab.id}`}
           tabIndex={0}
           hidden={tab.id !== activeTab}
-          className="focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-400"
         >
-          <pre className="min-h-[300px] overflow-x-auto p-4 font-mono text-xs leading-relaxed sm:text-sm">
+          <pre className="min-h-[300px] overflow-x-auto p-4 font-mono text-xs leading-relaxed sm:p-5 sm:text-sm">
             <code>
               {TAB_CONTENT[tab.id].map((line, index) => (
                 <span key={index} className={`block ${lineClass(line.kind)}`}>
                   {line.kind === 'cmd' && (
-                    <span className="mr-2 text-emerald-400" aria-hidden="true">
+                    <span className="mr-2 text-[#ff6a4a]" aria-hidden="true">
                       $
                     </span>
                   )}
