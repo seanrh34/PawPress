@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Category } from '@/lib/types';
+import PageHeader from '@/components/admin/PageHeader';
 
 export default function EditCategoryPage() {
   const router = useRouter();
@@ -26,7 +27,7 @@ export default function EditCategoryPage() {
     try {
       const response = await fetch(`/api/category/${id}`);
       if (!response.ok) throw new Error('Failed to fetch category');
-      
+
       const category: Category = await response.json();
       setFormData({
         name: category.name,
@@ -89,10 +90,10 @@ export default function EditCategoryPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center text-black">
+      <div className="flex items-center justify-center py-24">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading category...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-signal mx-auto mb-4"></div>
+          <p className="text-copy-muted">Loading category...</p>
         </div>
       </div>
     );
@@ -100,9 +101,9 @@ export default function EditCategoryPage() {
 
   if (error && !formData.name) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center text-black">
+      <div className="flex items-center justify-center py-24">
         <div className="text-center">
-          <div className="text-red-600 mb-4">
+          <div className="text-cancelled mb-4">
             <svg
               className="w-12 h-12 mx-auto"
               fill="none"
@@ -117,11 +118,12 @@ export default function EditCategoryPage() {
               />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Category</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
+          <h2 className="text-xl font-semibold mb-2">Error Loading Category</h2>
+          <p className="text-copy-muted mb-4">{error}</p>
           <button
+            type="button"
             onClick={() => router.push('/admin/category')}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="admin-btn admin-btn-primary"
           >
             Back to Categories
           </button>
@@ -131,107 +133,101 @@ export default function EditCategoryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 text-black">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Edit Category</h1>
-          <p className="mt-2 text-gray-600">
-            Update category information
-          </p>
-        </div>
+    <div>
+      <PageHeader
+        eyebrow="Content"
+        title="Edit Category"
+        description="Update category information"
+      />
 
-        {/* Form */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Error Message */}
-            {error && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-800">{error}</p>
-              </div>
-            )}
-
-            {/* Name Field */}
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                Category Name *
-              </label>
-              <input
-                type="text"
-                id="name"
-                value={formData.name}
-                onChange={(e) => handleNameChange(e.target.value)}
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="e.g., Technology, Lifestyle, Travel"
-              />
+      {/* Form */}
+      <div className="admin-card max-w-2xl">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Error Message */}
+          {error && (
+            <div className="admin-alert admin-alert-error">
+              <p>{error}</p>
             </div>
+          )}
 
-            {/* Slug Field */}
-            <div>
-              <label htmlFor="slug" className="block text-sm font-medium text-gray-700 mb-2">
-                Slug *
-              </label>
-              <input
-                type="text"
-                id="slug"
-                value={formData.slug}
-                onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                required
-                pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
-                placeholder="e.g., technology, lifestyle, travel"
-              />
-              <p className="mt-1 text-sm text-gray-500">
-                URL-friendly version. Auto-generated from name, but you can customize it.
-              </p>
-              <p className="mt-1 text-sm text-gray-500">
-                Preview: <span className="font-mono text-blue-600">domain.com/category/{formData.slug || 'slug'}</span>
-              </p>
-              <p className="mt-1 text-sm text-amber-600">
-                ⚠️ Changing the slug will break existing links to this category page
-              </p>
-            </div>
+          {/* Name Field */}
+          <div>
+            <label htmlFor="name" className="admin-label">
+              Category Name *
+            </label>
+            <input
+              type="text"
+              id="name"
+              value={formData.name}
+              onChange={(e) => handleNameChange(e.target.value)}
+              required
+              className="admin-input"
+              placeholder="e.g., Technology, Lifestyle, Travel"
+            />
+          </div>
 
-            {/* Description Field */}
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                Description *
-              </label>
-              <textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                required
-                rows={4}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="A brief description of this category. This will be displayed on the category page."
-              />
-              <p className="mt-1 text-sm text-gray-500">
-                {formData.description.length} characters
-              </p>
-            </div>
+          {/* Slug Field */}
+          <div>
+            <label htmlFor="slug" className="admin-label">
+              Slug *
+            </label>
+            <input
+              type="text"
+              id="slug"
+              value={formData.slug}
+              onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+              required
+              pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              className="admin-input font-mono"
+              placeholder="e.g., technology, lifestyle, travel"
+            />
+            <p className="admin-hint">
+              URL-friendly version. Auto-generated from name, but you can customize it.
+            </p>
+            <p className="admin-hint">
+              Preview: <span className="font-mono text-signal">domain.com/category/{formData.slug || 'slug'}</span>
+            </p>
+            <p className="admin-hint text-warning">
+              Warning: changing the slug will break existing links to this category page
+            </p>
+          </div>
 
-            {/* Action Buttons */}
-            <div className="flex justify-end gap-4 pt-4 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => router.push('/admin/category')}
-                className="px-6 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                disabled={isSubmitting}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
-          </form>
-        </div>
+          {/* Description Field */}
+          <div>
+            <label htmlFor="description" className="admin-label">
+              Description *
+            </label>
+            <textarea
+              id="description"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              required
+              rows={4}
+              className="admin-textarea"
+              placeholder="A brief description of this category. This will be displayed on the category page."
+            />
+            <p className="admin-hint">{formData.description.length} characters</p>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex justify-end gap-3 border-t border-rail pt-4">
+            <button
+              type="button"
+              onClick={() => router.push('/admin/category')}
+              className="admin-btn admin-btn-secondary"
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="admin-btn admin-btn-primary"
+            >
+              {isSubmitting ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
