@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { FiCopy } from 'react-icons/fi';
+import PageHeader from '@/components/admin/PageHeader';
 
 interface TokenMeta {
   id: string;
@@ -123,6 +125,14 @@ function formatRelative(iso: string): string {
 function isExpiringSoon(iso: string): boolean {
   const diff = Date.parse(iso) - Date.now();
   return Number.isFinite(diff) && diff > 0 && diff <= EXPIRING_SOON_MS;
+}
+
+function ScopeBadge({ scope }: { scope: string }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-rail bg-surface-subtle px-2 py-0.5 font-mono text-xs text-copy-muted">
+      {scope}
+    </span>
+  );
 }
 
 export default function TokensManager() {
@@ -301,292 +311,257 @@ export default function TokensManager() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center text-black">
+      <div className="flex items-center justify-center py-24">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading tokens...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-signal mx-auto mb-4"></div>
+          <p className="text-copy-muted">Loading tokens...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 text-black">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">API Tokens</h1>
-            <p className="mt-2 text-gray-600">
-              Create personal access tokens for AI agents using the pawpress CLI. Revoke
-              any token you no longer trust.
-            </p>
-          </div>
+    <div>
+      <PageHeader
+        eyebrow="Settings"
+        title="API Tokens"
+        description="Create personal access tokens for AI agents using the pawpress CLI. Revoke any token you no longer trust."
+        actions={
           <button
+            type="button"
             onClick={() => router.push('/admin')}
-            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="admin-btn admin-btn-ghost"
           >
             Back to Dashboard
           </button>
+        }
+      />
+
+      {/* List error */}
+      {listError && (
+        <div className="admin-alert admin-alert-error mb-6">
+          <p>{listError}</p>
         </div>
+      )}
 
-        {/* List error */}
-        {listError && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-800">{listError}</p>
-          </div>
-        )}
-
-        {/* Created token panel */}
-        {createdToken ? (
-          <div className="mb-8 bg-white rounded-lg shadow p-6 border-2 border-green-200">
-            <h2 className="text-lg font-semibold text-gray-900 mb-3">Token created</h2>
-            <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-amber-800 font-medium">
-                Copy this token now. For security it will not be shown again.
-              </p>
-            </div>
-
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Your new token
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                readOnly
-                value={createdToken}
-                onFocus={(e) => e.target.select()}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg font-mono text-sm bg-gray-50"
-              />
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                {copied ? 'Copied' : 'Copy'}
-              </button>
-            </div>
-
-            <div className="mt-6">
-              <p className="block text-sm font-medium text-gray-700 mb-2">
-                Give it to the agent and log it in with:
-              </p>
-              <pre className="px-4 py-3 bg-gray-900 text-gray-100 rounded-lg font-mono text-sm overflow-x-auto">
-                {usageSnippet}
-              </pre>
-            </div>
-
-            <div className="flex justify-end mt-6 pt-4 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={handleDone}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* Create form */
-          <div className="mb-8 bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Create a token</h2>
-            <form onSubmit={handleCreate} className="space-y-6">
-              {createError && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-red-800">{createError}</p>
-                </div>
-              )}
-
-              {/* Name */}
-              <div>
-                <label
-                  htmlFor="token-name"
-                  className="block text-sm font-medium text-gray-700 mb-2"
-                >
-                  Name *
-                </label>
+      {/* Created token panel */}
+      {createdToken ? (
+        <div className="admin-card mb-6">
+          <h2 className="text-lg font-semibold">Token created</h2>
+          <div className="admin-alert admin-alert-success mt-4">
+            <p className="admin-alert-title">
+              Copy this token now. For security it will not be shown again.
+            </p>
+            <div className="mt-3">
+              <label htmlFor="created-token" className="admin-label">
+                Your new token
+              </label>
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <input
                   type="text"
-                  id="token-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  maxLength={100}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="e.g., Content agent, Laptop CLI"
+                  id="created-token"
+                  readOnly
+                  value={createdToken}
+                  onFocus={(e) => e.target.select()}
+                  className="admin-input flex-1 font-mono text-sm"
                 />
-                {fieldErrors.name && (
-                  <p className="mt-1 text-sm text-red-600">{fieldErrors.name[0]}</p>
-                )}
-              </div>
-
-              {/* Scopes */}
-              <fieldset>
-                <legend className="block text-sm font-medium text-gray-700 mb-2">
-                  Scopes *
-                </legend>
-                <div className="space-y-3">
-                  {SCOPE_OPTIONS.map((option) => (
-                    <label
-                      key={option.value}
-                      className="flex items-start gap-3 cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={scopes.has(option.value)}
-                        onChange={() => toggleScope(option.value)}
-                        className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span>
-                        <span className="block text-sm font-medium text-gray-900 font-mono">
-                          {option.value}
-                        </span>
-                        <span className="block text-sm text-gray-500">
-                          {option.description}
-                        </span>
-                        {option.warning && (
-                          <span className="block text-xs text-amber-600 mt-0.5">
-                            {option.warning}
-                          </span>
-                        )}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-                {fieldErrors.scopes && (
-                  <p className="mt-2 text-sm text-red-600">{fieldErrors.scopes[0]}</p>
-                )}
-              </fieldset>
-
-              {/* Expiry */}
-              <div>
-                <span className="block text-sm font-medium text-gray-700 mb-2">
-                  Expires in *
-                </span>
-                <div className="flex gap-6">
-                  {EXPIRY_CHOICES.map((days) => (
-                    <label
-                      key={days}
-                      className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"
-                    >
-                      <input
-                        type="radio"
-                        name="expires_in_days"
-                        value={days}
-                        checked={expiresInDays === days}
-                        onChange={() => setExpiresInDays(days)}
-                        className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      {days} days
-                    </label>
-                  ))}
-                </div>
-                <p className="mt-1 text-sm text-gray-500">
-                  Short-lived tokens are safer. Tokens can last at most 90 days.
-                </p>
-                {fieldErrors.expires_in_days && (
-                  <p className="mt-1 text-sm text-red-600">
-                    {fieldErrors.expires_in_days[0]}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-4 pt-4 border-t border-gray-200">
                 <button
                   type="button"
-                  onClick={resetForm}
-                  className="px-6 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                  disabled={isCreating}
+                  onClick={handleCopy}
+                  className="admin-btn admin-btn-secondary sm:w-32"
                 >
-                  Reset
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreating}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isCreating ? 'Creating...' : 'Create Token'}
+                  <FiCopy size={16} aria-hidden="true" />
+                  {copied ? 'Copied' : 'Copy'}
                 </button>
               </div>
-            </form>
+            </div>
           </div>
-        )}
 
-        {/* Token list */}
-        {tokens.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-12 text-center">
-            <p className="text-gray-500">
-              No API tokens yet. Create one above to let an AI agent connect.
-            </p>
+          <div className="mt-6">
+            <p className="admin-label">Give it to the agent and log it in with:</p>
+            <pre className="overflow-x-auto rounded-[var(--radius-control)] bg-[var(--ink)] px-4 py-3 font-mono text-sm text-[var(--canvas)]">
+              {usageSnippet}
+            </pre>
           </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+
+          <div className="mt-6 flex justify-end border-t border-rail pt-4">
+            <button
+              type="button"
+              onClick={handleDone}
+              className="admin-btn admin-btn-primary"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      ) : (
+        /* Create form */
+        <div className="admin-card mb-6">
+          <h2 className="text-lg font-semibold">Create a token</h2>
+          <form onSubmit={handleCreate} className="mt-4 space-y-6">
+            {createError && (
+              <div className="admin-alert admin-alert-error">
+                <p>{createError}</p>
+              </div>
+            )}
+
+            {/* Name */}
+            <div>
+              <label htmlFor="token-name" className="admin-label">
+                Name *
+              </label>
+              <input
+                type="text"
+                id="token-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                maxLength={100}
+                className="admin-input"
+                placeholder="e.g., Content agent, Laptop CLI"
+              />
+              {fieldErrors.name && (
+                <p className="admin-error mt-1">{fieldErrors.name[0]}</p>
+              )}
+            </div>
+
+            {/* Scopes */}
+            <fieldset>
+              <legend className="admin-label">Scopes *</legend>
+              <div className="space-y-3">
+                {SCOPE_OPTIONS.map((option) => (
+                  <label
+                    key={option.value}
+                    className="flex cursor-pointer items-start gap-3"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={scopes.has(option.value)}
+                      onChange={() => toggleScope(option.value)}
+                      className="form-checkbox mt-0.5"
+                    />
+                    <span>
+                      <span className="block font-mono text-sm font-medium text-copy">
+                        {option.value}
+                      </span>
+                      <span className="block text-sm text-copy-muted">
+                        {option.description}
+                      </span>
+                      {option.warning && (
+                        <span className="mt-0.5 block text-xs text-warning">
+                          {option.warning}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {fieldErrors.scopes && (
+                <p className="admin-error mt-2">{fieldErrors.scopes[0]}</p>
+              )}
+            </fieldset>
+
+            {/* Expiry */}
+            <fieldset>
+              <legend className="admin-label">Expires in *</legend>
+              <div className="flex gap-6">
+                {EXPIRY_CHOICES.map((days) => (
+                  <label
+                    key={days}
+                    className="flex cursor-pointer items-center gap-2 text-sm text-copy"
+                  >
+                    <input
+                      type="radio"
+                      name="expires_in_days"
+                      value={days}
+                      checked={expiresInDays === days}
+                      onChange={() => setExpiresInDays(days)}
+                      className="form-checkbox"
+                    />
+                    {days} days
+                  </label>
+                ))}
+              </div>
+              <p className="admin-hint">
+                Short-lived tokens are safer. Tokens can last at most 90 days.
+              </p>
+              {fieldErrors.expires_in_days && (
+                <p className="admin-error mt-1">{fieldErrors.expires_in_days[0]}</p>
+              )}
+            </fieldset>
+
+            <div className="flex justify-end gap-3 border-t border-rail pt-4">
+              <button
+                type="button"
+                onClick={resetForm}
+                className="admin-btn admin-btn-ghost"
+                disabled={isCreating}
+              >
+                Reset
+              </button>
+              <button
+                type="submit"
+                disabled={isCreating}
+                className="admin-btn admin-btn-primary"
+              >
+                {isCreating ? 'Creating...' : 'Create Token'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Token list */}
+      {tokens.length === 0 ? (
+        <div className="admin-card py-12 text-center">
+          <p className="text-copy-muted">
+            No API tokens yet. Create one above to let an AI agent connect.
+          </p>
+        </div>
+      ) : (
+        <section className="admin-card">
+          {/* Table, md and up */}
+          <div className="hidden md:block">
+            <table className="admin-table">
+              <thead>
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Scopes
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Expires
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Scopes</th>
+                  <th scope="col">Created</th>
+                  <th scope="col">Expires</th>
+                  <th scope="col">Actions</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody>
                 {tokens.map((token) => {
                   const soon = isExpiringSoon(token.expires_at);
                   return (
-                    <tr key={token.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {token.name}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
+                    <tr key={token.id}>
+                      <td className="font-medium text-copy">{token.name}</td>
+                      <td>
                         <div className="flex flex-wrap gap-1">
                           {token.scopes.map((scope) => (
-                            <span
-                              key={scope}
-                              className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 font-mono"
-                            >
-                              {scope}
-                            </span>
+                            <ScopeBadge key={scope} scope={scope} />
                           ))}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="admin-mono-meta whitespace-nowrap">
                         {formatAbsolute(token.created_at)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div
-                          className={`text-sm ${
-                            soon ? 'font-semibold text-amber-600' : 'text-gray-500'
-                          }`}
-                        >
+                      <td className="whitespace-nowrap">
+                        <div className={`text-sm ${soon ? 'font-semibold text-warning' : 'text-copy-muted'}`}>
                           {formatRelative(token.expires_at)}
                         </div>
-                        <div
-                          className={`text-xs ${
-                            soon ? 'text-amber-600' : 'text-gray-400'
-                          }`}
-                        >
+                        <div className="admin-mono-meta">
                           {formatAbsolute(token.expires_at)}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <td>
                         <button
+                          type="button"
                           onClick={() => handleRevoke(token.id, token.name)}
                           disabled={revokingId === token.id}
-                          className="text-red-600 hover:text-red-900 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="admin-btn admin-btn-ghost-danger"
                         >
                           {revokingId === token.id ? 'Revoking...' : 'Revoke'}
                         </button>
@@ -597,8 +572,51 @@ export default function TokensManager() {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+
+          {/* Stacked cards, below md */}
+          <div className="flex flex-col gap-4 md:hidden">
+            {tokens.map((token) => {
+              const soon = isExpiringSoon(token.expires_at);
+              return (
+                <div key={token.id} className="rounded-[var(--radius-panel)] border border-rail p-4">
+                  <p className="font-medium text-copy">{token.name}</p>
+                  <dl className="mt-3 space-y-2 text-sm">
+                    <div>
+                      <dt className="portal-label text-copy-muted">Scopes</dt>
+                      <dd className="mt-1 flex flex-wrap gap-1">
+                        {token.scopes.map((scope) => (
+                          <ScopeBadge key={scope} scope={scope} />
+                        ))}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="portal-label text-copy-muted">Created</dt>
+                      <dd className="admin-mono-meta mt-0.5">{formatAbsolute(token.created_at)}</dd>
+                    </div>
+                    <div>
+                      <dt className="portal-label text-copy-muted">Expires</dt>
+                      <dd className={`mt-0.5 text-sm ${soon ? 'font-semibold text-warning' : 'text-copy-muted'}`}>
+                        {formatRelative(token.expires_at)}
+                        <span className="admin-mono-meta"> {formatAbsolute(token.expires_at)}</span>
+                      </dd>
+                    </div>
+                  </dl>
+                  <div className="mt-4 border-t border-rail pt-3">
+                    <button
+                      type="button"
+                      onClick={() => handleRevoke(token.id, token.name)}
+                      disabled={revokingId === token.id}
+                      className="admin-btn admin-btn-ghost-danger"
+                    >
+                      {revokingId === token.id ? 'Revoking...' : 'Revoke'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
