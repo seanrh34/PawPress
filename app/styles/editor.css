@@ -8,42 +8,46 @@
   text-align: right;
 }
 
+/* Base editor classes are shared with the public PostViewer; admin-only
+ * sizing lives in the .admin-shell overrides at the bottom of this file. */
+
 .editor-container {
   margin: 0;
+  border-radius: 2px;
+  color: #000;
   position: relative;
-  background: var(--surface);
-  color: var(--ink);
+  line-height: 20px;
   font-weight: 400;
   text-align: left;
-  overflow: hidden;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
 }
 
 .editor-inner {
-  background: var(--surface);
+  background: #fff;
   position: relative;
 }
 
 .editor-input {
-  min-height: 24rem;
+  min-height: 150px;
   resize: none;
-  font-size: 1rem;
-  line-height: 1.7;
-  caret-color: var(--ink);
-  color: var(--ink);
+  font-size: 15px;
+  caret-color: rgb(5, 5, 5);
   position: relative;
   tab-size: 1;
   outline: 0;
-  padding: 1rem 1.25rem;
+  padding: 15px 10px;
+  caret-color: #444;
 }
 
 .editor-placeholder {
-  color: var(--text-muted);
+  color: #999;
   overflow: hidden;
   position: absolute;
   text-overflow: ellipsis;
-  top: 1rem;
-  left: 1.25rem;
-  font-size: 1rem;
+  top: 15px;
+  left: 10px;
+  font-size: 15px;
   user-select: none;
   display: inline-block;
   pointer-events: none;
@@ -70,33 +74,35 @@
 }
 
 .editor-text-code {
-  background-color: var(--surface-subtle);
+  background-color: rgb(240, 242, 245);
   padding: 1px 0.25rem;
   font-family: Menlo, Consolas, Monaco, monospace;
   font-size: 94%;
 }
 
 .editor-link {
-  color: var(--accent-text);
+  color: rgb(33, 111, 219);
   text-decoration: none;
 }
 
 .tree-view-output {
   display: block;
-  background: var(--ink);
-  color: var(--canvas);
+  background: #222;
+  color: #fff;
   padding: 5px;
   font-size: 12px;
   white-space: pre-wrap;
   margin: 1px auto 10px auto;
   max-height: 250px;
   position: relative;
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
   overflow: auto;
   line-height: 14px;
 }
 
 .editor-code {
-  background-color: var(--surface-subtle);
+  background-color: rgb(240, 242, 245);
   font-family: Menlo, Consolas, Monaco, monospace;
   display: block;
   padding: 8px 8px 8px 52px;
@@ -114,12 +120,12 @@
 .editor-code:before {
   content: attr(data-gutter);
   position: absolute;
-  background-color: var(--surface-subtle);
+  background-color: #eee;
   left: 0;
   top: 0;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid #ccc;
   padding: 8px;
-  color: var(--text-muted);
+  color: #777;
   white-space: pre-wrap;
   text-align: right;
   min-width: 25px;
@@ -171,8 +177,8 @@
   margin: 0;
   margin-bottom: 1rem;
   position: relative;
-  color: var(--ink);
-  line-height: 1.7;
+  color: #374151; /* gray-700 */
+  line-height: 1.75;
 }
 
 .editor-paragraph:last-child {
@@ -187,7 +193,7 @@
 
 .editor-heading-h1 {
   font-size: 2.25rem; /* 36px - 4xl */
-  color: var(--ink);
+  color: #111827; /* gray-900 */
   font-weight: 700;
   margin: 0;
   margin-bottom: 1.5rem;
@@ -198,7 +204,7 @@
 
 .editor-heading-h2 {
   font-size: 1.5rem; /* 24px - 2xl */
-  color: var(--ink);
+  color: #111827; /* gray-900 */
   font-weight: 700;
   margin: 0;
   margin-top: 1.5rem;
@@ -209,7 +215,7 @@
 
 .editor-heading-h3 {
   font-size: 1.25rem; /* 20px - xl */
-  color: var(--ink);
+  color: #111827; /* gray-900 */
   font-weight: 700;
   margin: 0;
   margin-top: 1.25rem;
@@ -220,7 +226,7 @@
 
 .editor-heading-h4 {
   font-size: 1.125rem; /* 18px - lg */
-  color: var(--ink);
+  color: #111827; /* gray-900 */
   font-weight: 600;
   margin: 0;
   margin-top: 1rem;
@@ -231,7 +237,7 @@
 
 .editor-heading-h5 {
   font-size: 1rem; /* 16px - base */
-  color: var(--ink);
+  color: #111827; /* gray-900 */
   font-weight: 600;
   margin: 0;
   margin-top: 0.75rem;
@@ -242,7 +248,7 @@
 
 .editor-heading-h6 {
   font-size: 0.875rem; /* 14px - sm */
-  color: var(--ink);
+  color: #111827; /* gray-900 */
   font-weight: 600;
   margin: 0;
   margin-top: 0.75rem;
@@ -255,8 +261,8 @@
   margin: 0;
   margin-left: 20px;
   font-size: 15px;
-  color: var(--text-muted);
-  border-left-color: var(--border-strong);
+  color: rgb(101, 103, 107);
+  border-left-color: rgb(206, 208, 212);
   border-left-width: 4px;
   border-left-style: solid;
   padding-left: 16px;
@@ -808,4 +814,67 @@ i.right-align {
 
 i.justify-align {
   background-image: url(/icons/justify.svg);
+}
+
+/* ---------- Admin editor overrides ----------
+ * The Lexical post editor renders inside .admin-shell; the public PostViewer
+ * keeps the base styles above untouched. */
+.admin-shell .editor-container {
+  background: var(--surface);
+  color: var(--ink);
+  overflow: hidden;
+}
+
+.admin-shell .editor-inner {
+  background: var(--surface);
+}
+
+.admin-shell .editor-input {
+  min-height: 24rem;
+  font-size: 1rem;
+  line-height: 1.7;
+  padding: 1rem 1.25rem;
+  color: var(--ink);
+  caret-color: var(--ink);
+}
+
+.admin-shell .editor-placeholder {
+  color: var(--text-muted);
+  top: 1rem;
+  left: 1.25rem;
+  font-size: 1rem;
+}
+
+.admin-shell .editor-paragraph {
+  color: var(--ink);
+  line-height: 1.7;
+}
+
+.admin-shell .editor-heading-h1,
+.admin-shell .editor-heading-h2,
+.admin-shell .editor-heading-h3,
+.admin-shell .editor-heading-h4,
+.admin-shell .editor-heading-h5,
+.admin-shell .editor-heading-h6 {
+  color: var(--ink);
+}
+
+.admin-shell .editor-quote {
+  color: var(--text-muted);
+  border-left-color: var(--border-strong);
+}
+
+.admin-shell .editor-link {
+  color: var(--accent-text);
+}
+
+.admin-shell .editor-text-code,
+.admin-shell .editor-code {
+  background-color: var(--surface-subtle);
+}
+
+.admin-shell .editor-code:before {
+  background-color: var(--surface-subtle);
+  border-right-color: var(--border);
+  color: var(--text-muted);
 }

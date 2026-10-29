@@ -16,7 +16,8 @@ body:has(.admin-shell)::before {
 
 .admin-btn,
 .btn-primary,
-.btn-secondary {
+.btn-secondary,
+.admin-btn-ghost-danger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -40,7 +41,8 @@ body:has(.admin-shell)::before {
 
 .admin-btn:disabled,
 .btn-primary:disabled,
-.btn-secondary:disabled {
+.btn-secondary:disabled,
+.admin-btn-ghost-danger:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -388,6 +390,7 @@ body:has(.admin-shell)::before {
   .admin-btn,
   .btn-primary,
   .btn-secondary,
+  .admin-btn-ghost-danger,
   .admin-segment > button {
     min-height: 2.75rem;
   }

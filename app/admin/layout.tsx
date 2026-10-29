@@ -16,6 +16,7 @@ import {
   FiUsers,
 } from 'react-icons/fi';
 import type { IconType } from 'react-icons';
+import { useFocusTrap } from '@/components/admin/useFocusTrap';
 
 interface UserData {
   id: string;
@@ -57,6 +58,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [loggingOut, setLoggingOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useFocusTrap<HTMLDivElement>(menuOpen, menuButtonRef);
 
   useEffect(() => {
     fetchUser();
@@ -78,11 +80,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     setMenuOpen(false);
   }, [pathname]);
 
-  // Drawer behaviour: Escape closes, body scroll locks, focus returns to the
-  // menu button.
+  // Drawer behaviour: Escape closes and body scroll locks while open. Focus
+  // moves into the drawer, is trapped inside and returns to the Menu button
+  // via useFocusTrap.
   useEffect(() => {
     if (!menuOpen) return;
-    const menuButton = menuButtonRef.current;
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setMenuOpen(false);
@@ -94,7 +96,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => {
       document.removeEventListener('keydown', handleKey);
       document.body.style.overflow = previousOverflow;
-      menuButton?.focus();
     };
   }, [menuOpen]);
 
@@ -258,6 +259,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           />
           <div
             id="admin-mobile-nav"
+            ref={drawerRef}
             role="dialog"
             aria-modal="true"
             aria-label="Admin menu"

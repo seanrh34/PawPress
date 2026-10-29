@@ -1,5 +1,6 @@
-import React, { useEffect, useId, useRef } from "react";
+import React, { useEffect, useId } from "react";
 import { FiX } from "react-icons/fi";
+import { useFocusTrap } from "@/components/admin/useFocusTrap";
 
 interface CustomModalProps {
   title: string;
@@ -9,9 +10,6 @@ interface CustomModalProps {
   footer: React.ReactNode;
 }
 
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 export default function Modal({
   title,
   isOpen,
@@ -19,21 +17,15 @@ export default function Modal({
   children,
   footer,
 }: CustomModalProps) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const panelRef = useFocusTrap<HTMLDivElement>(isOpen);
   const titleId = useId();
 
   useEffect(() => {
     if (!isOpen) return;
-    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    // Move focus into the dialog.
-    panelRef.current?.focus();
     return () => {
       document.body.style.overflow = previousOverflow;
-      // Return focus to the trigger.
-      previouslyFocusedRef.current?.focus?.();
     };
   }, [isOpen]);
 
@@ -43,26 +35,6 @@ export default function Modal({
     if (event.key === "Escape") {
       event.stopPropagation();
       onClose();
-      return;
-    }
-    if (event.key !== "Tab" || !panelRef.current) return;
-
-    // Keep Tab cycling inside the dialog.
-    const focusables = Array.from(
-      panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-    ).filter((element) => element.offsetParent !== null);
-    if (focusables.length === 0) return;
-
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    const active = document.activeElement;
-
-    if (event.shiftKey && (active === first || active === panelRef.current)) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && (active === last || active === panelRef.current)) {
-      event.preventDefault();
-      first.focus();
     }
   };
 
