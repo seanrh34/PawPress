@@ -3,7 +3,7 @@ import { Bricolage_Grotesque, Instrument_Sans, JetBrains_Mono } from "next/font/
 import "./styles/globals.css";
 import "./styles/editor.css";
 import ConditionalHeader from "@/components/ConditionalHeader";
-import Footer from "@/components/Footer";
+import ConditionalFooter from "@/components/ConditionalFooter";
 
 const bricolage = Bricolage_Grotesque({
   subsets: ["latin"],
@@ -51,7 +51,7 @@ export default function RootLayout({
         <main className="min-h-screen">
           {children}
         </main>
-        <Footer />
+        <ConditionalFooter />
       </body>
     </html>
   );
