@@ -79,6 +79,17 @@ body:has(.admin-shell)::before {
   color: var(--ink);
 }
 
+/* Ghost variant for destructive actions; stays visually distinct. */
+.admin-btn-ghost-danger {
+  background: transparent;
+  color: var(--danger);
+}
+
+.admin-btn-ghost-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+  color: var(--danger);
+}
+
 .admin-btn-danger {
   background: var(--surface);
   border-color: color-mix(in srgb, var(--danger) 45%, transparent);
