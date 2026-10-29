@@ -12,7 +12,10 @@ import {
   $isRangeSelection,
   $createParagraphNode,
   $getNodeByKey,
-  BaseSelection
+  BaseSelection,
+  EditorState,
+  LexicalEditor,
+  RangeSelection
 } from "lexical";
 import { $isLinkNode, TOGGLE_LINK_COMMAND } from "@lexical/link";
 import {
@@ -88,7 +91,7 @@ function positionEditorElement(editor: HTMLElement, rect: DOMRect | null) {
   }
 }
 
-function FloatingLinkEditor({ editor }: { editor: any }) {
+function FloatingLinkEditor({ editor }: { editor: LexicalEditor }) {
   const editorRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const mouseDownRef = useRef(false);
@@ -128,7 +131,7 @@ function FloatingLinkEditor({ editor }: { editor: any }) {
       const domRange = nativeSelection.getRangeAt(0);
       let rect;
       if (nativeSelection.anchorNode === rootElement) {
-        let inner = rootElement;
+        let inner: Element = rootElement;
         while (inner.firstElementChild != null) {
           inner = inner.firstElementChild;
         }
@@ -153,7 +156,7 @@ function FloatingLinkEditor({ editor }: { editor: any }) {
 
   useEffect(() => {
     return mergeRegister(
-      editor.registerUpdateListener(({ editorState }: { editorState: any }) => {
+      editor.registerUpdateListener(({ editorState }: { editorState: EditorState }) => {
         editorState.read(() => {
           updateLinkEditor();
         });
@@ -242,7 +245,7 @@ function Select({ onChange, className, options, value }: { onChange: (e: React.C
   );
 }
 
-function getSelectedNode(selection: any) {
+function getSelectedNode(selection: RangeSelection) {
   const anchor = selection.anchor;
   const focus = selection.focus;
   const anchorNode = selection.anchor.getNode();
@@ -264,7 +267,7 @@ function BlockOptionsDropdownList({
   toolbarRef,
   setShowBlockOptionsDropDown
 }: {
-  editor: any;
+  editor: LexicalEditor;
   blockType: string;
   toolbarRef: React.RefObject<HTMLDivElement | null>;
   setShowBlockOptionsDropDown: (show: boolean) => void;
@@ -358,18 +361,18 @@ function BlockOptionsDropdownList({
 
   const formatBulletList = () => {
     if (blockType !== "ul") {
-      editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND);
+      editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined);
     } else {
-      editor.dispatchCommand(REMOVE_LIST_COMMAND);
+      editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined);
     }
     setShowBlockOptionsDropDown(false);
   };
 
   const formatNumberedList = () => {
     if (blockType !== "ol") {
-      editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND);
+      editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined);
     } else {
-      editor.dispatchCommand(REMOVE_LIST_COMMAND);
+      editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined);
     }
     setShowBlockOptionsDropDown(false);
   };
@@ -518,7 +521,7 @@ export default function ToolbarPlugin() {
 
   useEffect(() => {
     return mergeRegister(
-      editor.registerUpdateListener(({ editorState }: { editorState: any }) => {
+      editor.registerUpdateListener(({ editorState }: { editorState: EditorState }) => {
         editorState.read(() => {
           updateToolbar();
         });

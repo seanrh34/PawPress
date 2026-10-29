@@ -32,12 +32,12 @@ const SCOPE_OPTIONS: ScopeOption[] = [
     value: 'posts:publish',
     description:
       'Publish/unpublish; edit already-published posts; create with status "published".',
-    warning: 'Grants publishing — only enable if you trust the agent.',
+    warning: 'Grants publishing; only enable if you trust the agent.',
   },
   {
     value: 'posts:delete',
     description: 'Delete posts.',
-    warning: 'Grants deleting — only enable if you trust the agent.',
+    warning: 'Grants deleting; only enable if you trust the agent.',
   },
   {
     value: 'categories:write',
@@ -90,7 +90,7 @@ function parseApiError(data: unknown): ApiErrorPayload {
 
 function createErrorMessage(payload: ApiErrorPayload): string {
   if (payload.code === 'internal') {
-    return "Token signing isn't configured — ask the site owner to set PAWPRESS_TOKEN_SECRET";
+    return "Token signing isn't configured. Ask the site owner to set PAWPRESS_TOKEN_SECRET";
   }
   return payload.message;
 }

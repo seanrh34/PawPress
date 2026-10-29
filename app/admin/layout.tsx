@@ -82,6 +82,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // menu button.
   useEffect(() => {
     if (!menuOpen) return;
+    const menuButton = menuButtonRef.current;
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setMenuOpen(false);
@@ -93,7 +94,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => {
       document.removeEventListener('keydown', handleKey);
       document.body.style.overflow = previousOverflow;
-      menuButtonRef.current?.focus();
+      menuButton?.focus();
     };
   }, [menuOpen]);
 

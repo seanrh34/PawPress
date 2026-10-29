@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import PostEditor from '@/components/PostEditor';
 import { Post } from '@/lib/types';
 
@@ -66,12 +67,12 @@ export default function EditPost() {
           </div>
           <h2 className="text-xl font-semibold mb-2">Error Loading Post</h2>
           <p className="text-copy-muted mb-4">{error || 'Post not found'}</p>
-          <a
+          <Link
             href="/admin"
             className="admin-btn admin-btn-primary"
           >
             Back to Dashboard
-          </a>
+          </Link>
         </div>
       </div>
     );
