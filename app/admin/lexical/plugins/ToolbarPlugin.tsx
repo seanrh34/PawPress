@@ -231,7 +231,7 @@ function FloatingLinkEditor({ editor }: { editor: any }) {
 
 function Select({ onChange, className, options, value }: { onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; className: string; options: string[]; value: string }) {
   return (
-    <select className={className} onChange={onChange} value={value}>
+    <select className={className} onChange={onChange} value={value} aria-label="Code language">
       <option hidden={true} value="" />
       {options.map((option) => (
         <option key={option} value={option}>
@@ -278,7 +278,9 @@ function BlockOptionsDropdownList({
     if (toolbar !== null && dropDown !== null) {
       const { top, left } = toolbar.getBoundingClientRect();
       dropDown.style.top = `${top + window.scrollY + 40}px`;
-      dropDown.style.left = `${left + window.scrollX}px`;
+      // Clamp the dropdown inside the viewport (8px margin each side).
+      const maxLeft = window.scrollX + window.innerWidth - dropDown.offsetWidth - 8;
+      dropDown.style.left = `${Math.max(window.scrollX + 8, Math.min(left + window.scrollX, maxLeft))}px`;
     }
   }, [dropDownRef, toolbarRef]);
 
