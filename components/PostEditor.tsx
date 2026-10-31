@@ -10,6 +10,8 @@ import { SerializedEditorState } from 'lexical';
 import { Post, Category } from '@/lib/types';
 import { postStatus } from '@/lib/cms/status';
 import { uploadImageViaServer } from '@/lib/clientUploads';
+import { FiArrowLeft } from 'react-icons/fi';
+import PageHeader from '@/components/admin/PageHeader';
 
 interface PostEditorProps {
   post?: Post;
@@ -69,7 +71,7 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
         if (!response.ok) throw new Error('Failed to fetch categories');
         const data = await response.json();
         setCategories(data);
-        
+
         // Auto-select first category if creating new post and no category selected
         if (mode === 'create' && !categoryId && data.length > 0) {
           setCategoryId(data[0].id);
@@ -95,7 +97,7 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTitle = e.target.value;
     setTitle(newTitle);
-    
+
     // Auto-generate slug only in create mode and if slug hasn't been manually edited
     if (mode === 'create') {
       const autoSlug = newTitle
@@ -325,122 +327,127 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
   }, [content]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">
-          {mode === 'create' ? 'Create New Post' : 'Edit Post'}
-        </h1>
+    <div>
+      <Link href="/admin" className="admin-btn admin-btn-ghost -ml-1 mb-4">
+        <FiArrowLeft size={16} aria-hidden="true" />
+        All posts
+      </Link>
 
-        {editMode && lock.state.status === 'unavailable' && (
-          <div className="mb-6 rounded-lg border border-gray-300 bg-gray-100 px-4 py-3 text-sm text-gray-700">
-            Live edit locking isn&apos;t enabled on this site (apply the
-            post_edit_locks migration). Conflicting saves are still detected.
+      <PageHeader
+        eyebrow="Content"
+        title={mode === 'create' ? 'New post' : 'Edit post'}
+      />
+
+      {/* Edit-lock and conflict alerts, above the form fields at every size */}
+      {editMode && lock.state.status === 'unavailable' && (
+        <div className="admin-alert admin-alert-info mb-6">
+          Live edit locking isn&apos;t enabled on this site (apply the
+          post_edit_locks migration). Conflicting saves are still detected.
+        </div>
+      )}
+
+      {editMode && lock.state.status === 'error' && (
+        <div className="admin-alert admin-alert-warning mb-6">
+          <p>Couldn&apos;t check whether someone else is editing (retrying…).</p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => void handleSubmit()}
+              className="admin-btn admin-btn-secondary"
+            >
+              Save anyway
+            </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {editMode && lock.state.status === 'error' && (
-          <div className="mb-6 rounded-lg border border-gray-300 bg-gray-100 px-4 py-3 text-sm text-gray-700">
-            <p>Couldn&apos;t check whether someone else is editing (retrying…).</p>
-            <div className="mt-3">
-              <button
-                type="button"
-                onClick={() => void handleSubmit()}
-                className="btn-secondary"
-              >
-                Save anyway
-              </button>
-            </div>
+      {editMode && lock.state.status === 'blocked' && lock.state.holder && (
+        <div className="admin-alert admin-alert-warning mb-6">
+          <p>
+            {lock.state.holder.kind === 'agent' ? (
+              <>
+                An AI agent is editing this post: {lock.state.holder.label},
+                since {formatLockTime(lock.state.acquiredAt)}, lease expires{' '}
+                {formatLockTime(lock.state.expiresAt)}. If you take over, the
+                agent&apos;s pending changes will be rejected and it will report
+                that an admin is editing.
+              </>
+            ) : (
+              <>
+                {lock.state.holder.label} is editing this post in another
+                session since {formatLockTime(lock.state.acquiredAt)}.
+              </>
+            )}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => void lock.takeOver()}
+              className="admin-btn admin-btn-primary"
+            >
+              Take over editing
+            </button>
+            <Link href="/admin" className="admin-btn admin-btn-secondary">
+              Back to posts
+            </Link>
           </div>
-        )}
+        </div>
+      )}
 
-        {editMode && lock.state.status === 'blocked' && lock.state.holder && (
-          <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900">
-            <p className="text-sm">
-              {lock.state.holder.kind === 'agent' ? (
-                <>
-                  🤖 An AI agent is editing this post: {lock.state.holder.label},
-                  since {formatLockTime(lock.state.acquiredAt)}, lease expires{' '}
-                  {formatLockTime(lock.state.expiresAt)}. If you take over, the
-                  agent&apos;s pending changes will be rejected and it will report
-                  that an admin is editing.
-                </>
-              ) : (
-                <>
-                  👤 {lock.state.holder.label} is editing this post in another
-                  session since {formatLockTime(lock.state.acquiredAt)}.
-                </>
-              )}
-            </p>
-            <div className="mt-3 flex gap-3">
-              <button
-                type="button"
-                onClick={() => void lock.takeOver()}
-                className="btn-primary"
-              >
-                Take over editing
-              </button>
-              <Link href="/admin" className="btn-secondary">
-                Back to posts
-              </Link>
-            </div>
+      {editMode && lock.state.status === 'lost' && lock.state.holder && (
+        <div className="admin-alert admin-alert-error mb-6">
+          <p>
+            {lock.state.holder.label} took over editing at{' '}
+            {formatLockTime(lock.state.acquiredAt)}. Your unsaved changes have
+            NOT been saved.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => void lock.takeOver()}
+              className="admin-btn admin-btn-primary"
+            >
+              Take back editing
+            </button>
+            <button
+              type="button"
+              onClick={copyContent}
+              className="admin-btn admin-btn-secondary"
+            >
+              Copy my content
+            </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {editMode && lock.state.status === 'lost' && lock.state.holder && (
-          <div className="mb-6 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-red-900">
-            <p className="text-sm">
-              {lock.state.holder.label} took over editing at{' '}
-              {formatLockTime(lock.state.acquiredAt)}. Your unsaved changes have
-              NOT been saved.
-            </p>
-            <div className="mt-3 flex gap-3">
-              <button
-                type="button"
-                onClick={() => void lock.takeOver()}
-                className="btn-primary"
-              >
-                Take back editing
-              </button>
-              <button
-                type="button"
-                onClick={copyContent}
-                className="btn-secondary"
-              >
-                Copy my content
-              </button>
-            </div>
+      {conflict !== null && (
+        <div className="admin-alert admin-alert-warning mb-6">
+          <p>This post was changed since you opened it (possibly by an agent).</p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => void handleSubmit(true)}
+              className="admin-btn admin-btn-primary"
+            >
+              Overwrite their changes
+            </button>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="admin-btn admin-btn-secondary"
+            >
+              Reload latest
+            </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {conflict !== null && (
-          <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900">
-            <p className="text-sm">
-              This post was changed since you opened it (possibly by an agent).
-            </p>
-            <div className="mt-3 flex gap-3">
-              <button
-                type="button"
-                onClick={() => void handleSubmit(true)}
-                className="btn-primary"
-              >
-                Overwrite their changes
-              </button>
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="btn-secondary"
-              >
-                Reload latest
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-6">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        {/* Main column */}
+        <div className="min-w-0 space-y-6">
           {/* Title */}
           <div>
-            <label htmlFor="title" className="form-label">
+            <label htmlFor="title" className="admin-label">
               Title *
             </label>
             <input
@@ -449,38 +456,39 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
               value={title}
               onChange={handleTitleChange}
               required
-              className="form-input"
+              className="admin-title-input"
               placeholder="Enter post title"
             />
           </div>
 
           {/* Slug */}
           <div>
-            <label htmlFor="slug" className="form-label">
+            <label htmlFor="slug" className="admin-label">
               Slug *
             </label>
-            <input
-              type="text"
-              id="slug"
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              required
-              className="form-input"
-              placeholder="post-url-slug"
-            />
+            <div className="flex">
+              <span className="inline-flex items-center whitespace-nowrap rounded-l-[var(--radius-control)] border border-rail-strong border-r-0 bg-surface-subtle px-3 font-mono text-sm text-copy-muted">
+                blog.34cats.com/
+              </span>
+              <input
+                type="text"
+                id="slug"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                required
+                className="admin-input min-w-0 rounded-l-none font-mono"
+                placeholder="post-url-slug"
+              />
+            </div>
             {['admin', 'api', 'category', 'posts', 'styles'].includes(slug.toLowerCase()) && (
-              <p className="text-red-600 text-sm mt-1">
-                ⚠️ This slug is reserved and cannot be used
-              </p>
+              <p className="admin-error mt-1">This slug is reserved and cannot be used</p>
             )}
-            <p className="form-hint">
-              URL: /{slug || 'your-post-slug'}
-            </p>
+            <p className="admin-hint">URL: /{slug || 'your-post-slug'}</p>
           </div>
 
           {/* Excerpt */}
           <div>
-            <label htmlFor="excerpt" className="form-label">
+            <label htmlFor="excerpt" className="admin-label">
               Excerpt
             </label>
             <textarea
@@ -488,106 +496,78 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
               value={excerpt}
               onChange={(e) => setExcerpt(e.target.value)}
               rows={3}
-              className="form-textarea"
+              className="admin-textarea"
               placeholder="Brief description of your post"
             />
           </div>
 
-          {/* Category */}
-          <div>
-            <label htmlFor="category" className="form-label">
-              Category *
-            </label>
-            {isLoadingCategories ? (
-              <div className="text-sm text-gray-500">Loading categories...</div>
-            ) : categories.length === 0 ? (
-              <div className="text-sm text-red-600">
-                No categories available. Please create a category first.
-              </div>
-            ) : (
-              <select
-                id="category"
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                required
-                className="form-input"
-              >
-                <option value="">Select a category</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          {/* Featured Image */}
-          <FeaturedImageUpload
-            value={post?.featured_image_url || null}
-            onChange={(url, file, isExternal) => {
-              setFeaturedImageUrl(url);
-              setFeaturedImageFile(file);
-              setIsExternalUrl(isExternal || false);
-            }}
-          />
-
           {/* Content - Lexical Rich-text Editor */}
-          <div className='text-black'>
-            <label htmlFor="content" className="form-label">
+          <div>
+            <label htmlFor="content" className="admin-label">
               Content
             </label>
-            <Editor 
-              onChange={setContent}
-              initialState={post?.content_lexical}
-            />
-          </div>
-
-          {/* Publish / Schedule */}
-          <div className="space-y-2">
-            <span className="form-label">Publishing</span>
-            <div className="flex flex-wrap gap-6">
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="publishMode"
-                  checked={publishMode === 'draft'}
-                  onChange={() => setPublishMode('draft')}
-                  className="form-checkbox"
-                />
-                Draft
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="publishMode"
-                  checked={publishMode === 'now'}
-                  onChange={() => setPublishMode('now')}
-                  className="form-checkbox"
-                />
-                Publish now
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="publishMode"
-                  checked={publishMode === 'schedule'}
-                  onChange={() => setPublishMode('schedule')}
-                  className="form-checkbox"
-                />
-                Schedule
-              </label>
+            <div className="admin-card admin-card-flush">
+              <Editor
+                onChange={setContent}
+                initialState={post?.content_lexical}
+              />
             </div>
+          </div>
+        </div>
+
+        {/* Sidebar */}
+        <div className="flex flex-col gap-6 lg:sticky lg:top-6 lg:self-start">
+          {/* Publish / Schedule */}
+          <div className="admin-card">
+            <h2 className="text-lg font-semibold">Publish</h2>
+            <fieldset className="mt-4">
+              <legend className="admin-label">Publishing</legend>
+              <div className="flex flex-col gap-2.5">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="publishMode"
+                    checked={publishMode === 'draft'}
+                    onChange={() => setPublishMode('draft')}
+                    className="form-checkbox"
+                  />
+                  Draft
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="publishMode"
+                    checked={publishMode === 'now'}
+                    onChange={() => setPublishMode('now')}
+                    className="form-checkbox"
+                  />
+                  Publish now
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="publishMode"
+                    checked={publishMode === 'schedule'}
+                    onChange={() => setPublishMode('schedule')}
+                    className="form-checkbox"
+                  />
+                  Schedule
+                </label>
+              </div>
+            </fieldset>
             {publishMode === 'schedule' && (
-              <div className="mt-2">
+              <div className="mt-3">
+                <label htmlFor="scheduleAt" className="admin-label">
+                  Date and time
+                </label>
                 <input
                   type="datetime-local"
                   id="scheduleAt"
                   value={scheduleAt}
                   onChange={(e) => setScheduleAt(e.target.value)}
-                  className="form-input"
+                  className="admin-input"
                 />
-                <p className="form-hint">
+                <p className="admin-hint">
                   {timeZone ? `Time zone: ${timeZone}. ` : ''}
                   {scheduleAt
                     ? `Goes live automatically at ${new Date(scheduleAt).toLocaleString()}.`
@@ -595,27 +575,66 @@ export default function PostEditor({ post, mode }: PostEditorProps) {
                 </p>
               </div>
             )}
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => void handleSubmit()}
+                disabled={isSaving || !canSave}
+                className="admin-btn admin-btn-primary w-full"
+              >
+                {submitLabel}
+              </button>
+              <Link href="/admin" className="admin-btn admin-btn-secondary w-full">
+                Cancel
+              </Link>
+            </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex gap-4 pt-6 border-t border-gray-200">
-            <button
-              type="button"
-              onClick={() => void handleSubmit()}
-              disabled={isSaving || !canSave}
-              className="btn-primary"
-            >
-              {submitLabel}
-            </button>
-            <Link
-              href="/admin"
-              className="btn-secondary"
-            >
-              Cancel
-            </Link>
+          {/* Category */}
+          <div className="admin-card">
+            <h2 className="text-lg font-semibold">Category</h2>
+            <div className="mt-4">
+              <label htmlFor="category" className="admin-label">
+                Category *
+              </label>
+              {isLoadingCategories ? (
+                <div className="text-sm text-copy-muted">Loading categories...</div>
+              ) : categories.length === 0 ? (
+                <div className="admin-error">
+                  No categories available. Please create a category first.
+                </div>
+              ) : (
+                <select
+                  id="category"
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                  required
+                  className="admin-select"
+                >
+                  <option value="">Select a category</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+
+          {/* Featured Image */}
+          <div className="admin-card">
+            <FeaturedImageUpload
+              value={post?.featured_image_url || null}
+              onChange={(url, file, isExternal) => {
+                setFeaturedImageUrl(url);
+                setFeaturedImageFile(file);
+                setIsExternalUrl(isExternal || false);
+              }}
+            />
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

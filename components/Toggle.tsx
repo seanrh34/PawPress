@@ -7,16 +7,16 @@ interface ToggleProps {
 
 export default function Toggle({ leftChoice, rightChoice, checked = false, onChange }: ToggleProps) {
     return (
-        <label className="inline-flex items-center cursor-pointer">
-            <span className="select-none text-sm font-medium text-gray-700">{leftChoice}</span>
-            <input 
-                type="checkbox" 
+        <label className="inline-flex cursor-pointer items-center gap-3">
+            <span className="select-none text-sm font-medium text-copy-muted">{leftChoice}</span>
+            <input
+                type="checkbox"
                 checked={checked}
                 onChange={(e) => onChange?.(e.target.checked)}
-                className="sr-only peer" 
+                className="sr-only peer"
             />
-            <div className="relative mx-3 w-9 h-5 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-200 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-            <span className="select-none text-sm font-medium text-gray-700">{rightChoice}</span>
+            <div className="relative h-6 w-10 rounded-full bg-rail-strong transition-colors after:absolute after:start-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-copy peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-signal peer-focus-visible:ring-offset-2 rtl:peer-checked:after:-translate-x-4"></div>
+            <span className="select-none text-sm font-medium text-copy-muted">{rightChoice}</span>
         </label>
     );
 }

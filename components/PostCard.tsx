@@ -1,63 +1,105 @@
 import Link from 'next/link';
-import Image from 'next/image';
+import type { CSSProperties } from 'react';
+import { BrowserFrame } from '@/components/shared/browser-frame';
+import { Bracket } from '@/components/brand/bracket';
 import { Post } from '@/lib/types';
 
 interface PostCardProps {
   post: Post;
+  featured?: boolean;
+  /** Alternates the tinted image panel and frame tilt between cards. */
+  index?: number;
 }
 
-export default function PostCard({ post }: PostCardProps) {
+const TINT_CYCLE = ['bg-butter', 'bg-lilac', 'bg-sage', 'bg-sky'] as const;
+
+// Fixed locale + timeZone so server and client render the same string (no hydration mismatch).
+const dateFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+
+export default function PostCard({ post, featured = false, index }: PostCardProps) {
+  const published = post.published_at ? new Date(post.published_at) : null;
+  const publishedLabel =
+    published && !Number.isNaN(published.getTime()) ? dateFormatter.format(published) : null;
+  const tint = index === undefined ? 'bg-sky' : TINT_CYCLE[index % TINT_CYCLE.length];
+  const rotate = index === undefined ? -1.5 : index % 2 ? 1.5 : -1.5;
+
   return (
-    <Link href={`/${post.slug}`}>
-      <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow h-full flex flex-col">
-        {/* Featured Image */}
-        <div className="h-64 bg-gray-200 relative overflow-hidden">
+    <Link
+      href={`/${post.slug}`}
+      className={`app-card group relative block h-full min-w-0 ${featured ? 'md:col-span-2 lg:col-span-3' : ''}`}
+    >
+      <div className={`relative flex h-full min-w-0 flex-col overflow-hidden rounded-panel border border-rail bg-platform-raised ${featured ? 'lg:flex-row' : ''}`}>
+        {/* Tinted image panel with the featured image in browser chrome */}
+        <div className={`relative min-w-0 ${tint} px-6 pb-9 pt-10 md:px-9 ${featured ? 'lg:w-[55%]' : ''}`}>
+          {featured && (
+            <Bracket shape="corner" className="card-corner absolute left-4 top-4 size-8" stroke="var(--text)" strokeWidth={3.5} />
+          )}
           {post.featured_image_url ? (
-            <Image
+            <BrowserFrame
               src={post.featured_image_url}
-              alt={post.title}
-              fill
-              className="object-cover"
+              alt=""
+              host={`blog.34cats.com/${post.slug}`}
+              rotate={rotate}
+              sizes={featured ? '(max-width: 1024px) 100vw, 700px' : '(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw'}
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-gray-400">
-              <svg
-                className="w-16 h-16"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
-              </svg>
+            <div
+              className="card-frame overflow-hidden rounded-xl border-2 border-copy"
+              style={{ '--frame-rot': `${rotate}deg` } as CSSProperties}
+            >
+              <div className="flex items-center gap-3 border-b-2 border-copy bg-surface-subtle px-3 py-2" aria-hidden="true">
+                <span className="flex shrink-0 gap-1.5">
+                  <span className="size-2.5 rounded-full bg-tomato" />
+                  <span className="size-2.5 rounded-full bg-butter" />
+                  <span className="size-2.5 rounded-full bg-sage" />
+                </span>
+                <span className="min-w-0 flex-1 truncate rounded-full bg-platform-raised px-3 py-1 font-mono text-[0.6875rem] text-copy-muted">
+                  {`blog.34cats.com/${post.slug}`}
+                </span>
+              </div>
+              <div className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-2">
+                <Bracket shape="open" className="w-16" stroke="var(--text)" strokeWidth={5} />
+                <span className="portal-label text-copy-muted">no cover image</span>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Content */}
-        <div className="p-6 flex-1 flex flex-col">
-          {/* Category Badge */}
+        {/* Body */}
+        <div className="flex min-w-0 flex-1 flex-col p-6 md:p-8">
           {post.category && (
-            <div className="mb-3">
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                {post.category.name}
-              </span>
-            </div>
+            <span className="portal-label w-fit rounded-full border border-copy px-2.5 py-1 text-copy">
+              {post.category.name}
+            </span>
           )}
-          
-          <h3 className="text-xl font-semibold text-gray-900 mb-2 line-clamp-2">
+
+          <h3
+            className={`portal-heading mt-4 line-clamp-2 break-words text-copy ${
+              featured ? 'text-3xl md:text-4xl' : 'text-2xl'
+            }`}
+          >
             {post.title}
           </h3>
-          <p className="text-gray-600 mb-4 line-clamp-3 flex-1">
-            {post.excerpt}
-          </p>
-          <span className="text-blue-600 hover:text-blue-800 font-medium">
-            Read more →
-          </span>
+
+          <p className="mt-2 line-clamp-3 flex-1 text-copy-muted">{post.excerpt}</p>
+
+          <div className="mt-auto flex items-center justify-between gap-3 pt-5">
+            {publishedLabel ? (
+              <time dateTime={post.published_at ?? undefined} className="font-mono text-xs text-copy-muted">
+                {publishedLabel}
+              </time>
+            ) : (
+              <span />
+            )}
+            <span className="inline-flex items-center gap-1 text-sm font-medium text-signal">
+              Read <span aria-hidden="true" className="transition-transform motion-safe:group-hover:translate-x-0.5">→</span>
+            </span>
+          </div>
         </div>
       </div>
     </Link>

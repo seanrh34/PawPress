@@ -12,7 +12,10 @@ import {
   $isRangeSelection,
   $createParagraphNode,
   $getNodeByKey,
-  BaseSelection
+  BaseSelection,
+  EditorState,
+  LexicalEditor,
+  RangeSelection
 } from "lexical";
 import { $isLinkNode, TOGGLE_LINK_COMMAND } from "@lexical/link";
 import {
@@ -88,7 +91,7 @@ function positionEditorElement(editor: HTMLElement, rect: DOMRect | null) {
   }
 }
 
-function FloatingLinkEditor({ editor }: { editor: any }) {
+function FloatingLinkEditor({ editor }: { editor: LexicalEditor }) {
   const editorRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const mouseDownRef = useRef(false);
@@ -128,7 +131,7 @@ function FloatingLinkEditor({ editor }: { editor: any }) {
       const domRange = nativeSelection.getRangeAt(0);
       let rect;
       if (nativeSelection.anchorNode === rootElement) {
-        let inner = rootElement;
+        let inner: Element = rootElement;
         while (inner.firstElementChild != null) {
           inner = inner.firstElementChild;
         }
@@ -153,7 +156,7 @@ function FloatingLinkEditor({ editor }: { editor: any }) {
 
   useEffect(() => {
     return mergeRegister(
-      editor.registerUpdateListener(({ editorState }: { editorState: any }) => {
+      editor.registerUpdateListener(({ editorState }: { editorState: EditorState }) => {
         editorState.read(() => {
           updateLinkEditor();
         });
@@ -231,7 +234,7 @@ function FloatingLinkEditor({ editor }: { editor: any }) {
 
 function Select({ onChange, className, options, value }: { onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; className: string; options: string[]; value: string }) {
   return (
-    <select className={className} onChange={onChange} value={value}>
+    <select className={className} onChange={onChange} value={value} aria-label="Code language">
       <option hidden={true} value="" />
       {options.map((option) => (
         <option key={option} value={option}>
@@ -242,7 +245,7 @@ function Select({ onChange, className, options, value }: { onChange: (e: React.C
   );
 }
 
-function getSelectedNode(selection: any) {
+function getSelectedNode(selection: RangeSelection) {
   const anchor = selection.anchor;
   const focus = selection.focus;
   const anchorNode = selection.anchor.getNode();
@@ -264,7 +267,7 @@ function BlockOptionsDropdownList({
   toolbarRef,
   setShowBlockOptionsDropDown
 }: {
-  editor: any;
+  editor: LexicalEditor;
   blockType: string;
   toolbarRef: React.RefObject<HTMLDivElement | null>;
   setShowBlockOptionsDropDown: (show: boolean) => void;
@@ -278,7 +281,9 @@ function BlockOptionsDropdownList({
     if (toolbar !== null && dropDown !== null) {
       const { top, left } = toolbar.getBoundingClientRect();
       dropDown.style.top = `${top + window.scrollY + 40}px`;
-      dropDown.style.left = `${left + window.scrollX}px`;
+      // Clamp the dropdown inside the viewport (8px margin each side).
+      const maxLeft = window.scrollX + window.innerWidth - dropDown.offsetWidth - 8;
+      dropDown.style.left = `${Math.max(window.scrollX + 8, Math.min(left + window.scrollX, maxLeft))}px`;
     }
   }, [dropDownRef, toolbarRef]);
 
@@ -356,18 +361,18 @@ function BlockOptionsDropdownList({
 
   const formatBulletList = () => {
     if (blockType !== "ul") {
-      editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND);
+      editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined);
     } else {
-      editor.dispatchCommand(REMOVE_LIST_COMMAND);
+      editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined);
     }
     setShowBlockOptionsDropDown(false);
   };
 
   const formatNumberedList = () => {
     if (blockType !== "ol") {
-      editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND);
+      editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined);
     } else {
-      editor.dispatchCommand(REMOVE_LIST_COMMAND);
+      editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined);
     }
     setShowBlockOptionsDropDown(false);
   };
@@ -516,7 +521,7 @@ export default function ToolbarPlugin() {
 
   useEffect(() => {
     return mergeRegister(
-      editor.registerUpdateListener(({ editorState }: { editorState: any }) => {
+      editor.registerUpdateListener(({ editorState }: { editorState: EditorState }) => {
         editorState.read(() => {
           updateToolbar();
         });

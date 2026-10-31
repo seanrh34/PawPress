@@ -2,6 +2,7 @@
 
 import { useEffect, useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import PageHeader from '@/components/admin/PageHeader';
 
 interface UserData {
   id: string;
@@ -27,7 +28,7 @@ export default function ProfilePage() {
     try {
       const response = await fetch('/api/auth/session');
       const data = await response.json();
-      
+
       if (!data.authenticated) {
         router.push('/admin/login');
         return;
@@ -80,8 +81,8 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="p-8">
-        <div className="text-gray-600">Loading profile...</div>
+      <div className="py-12">
+        <div className="text-copy-muted">Loading profile...</div>
       </div>
     );
   }
@@ -91,39 +92,40 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Profile Settings</h1>
-        <p className="text-gray-600 mt-1">Manage your account information</p>
-      </div>
+    <div>
+      <PageHeader
+        eyebrow="Settings"
+        title="Profile Settings"
+        description="Manage your account information"
+      />
 
       {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
+        <div className="admin-alert admin-alert-error mb-6">
+          <p>{error}</p>
         </div>
       )}
 
       {success && (
-        <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
-          {success}
+        <div className="admin-alert admin-alert-success mb-6">
+          <p>{success}</p>
         </div>
       )}
 
-      <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-        <div className="mb-6 pb-6 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Account Information</h2>
-          <div className="space-y-3">
+      <div className="admin-card max-w-2xl">
+        <div className="mb-6 border-b border-rail pb-6">
+          <h2 className="text-lg font-semibold">Account Information</h2>
+          <div className="mt-4 space-y-3">
             <div>
-              <label className="block text-sm font-medium text-gray-600">Email</label>
-              <p className="text-gray-900 mt-1">{user.email}</p>
+              <p className="admin-label">Email</p>
+              <p className="text-copy">{user.email}</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-600">Role</label>
-              <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full mt-1 ${
-                user.role === 'master' 
-                  ? 'bg-purple-100 text-purple-800'
-                  : 'bg-blue-100 text-blue-800'
-              }`}>
+              <p className="admin-label">Role</p>
+              <span
+                className={`status-badge mt-1 ${
+                  user.role === 'master' ? 'status-badge-master' : 'status-badge-admin'
+                }`}
+              >
                 {user.role}
               </span>
             </div>
@@ -131,28 +133,27 @@ export default function ProfilePage() {
         </div>
 
         <form onSubmit={handleSubmit}>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Display Name</h2>
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+          <h2 className="text-lg font-semibold">Display Name</h2>
+          <div className="mt-4">
+            <label htmlFor="display-name" className="admin-label">
               Display Name
             </label>
             <input
+              id="display-name"
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Enter your display name"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-black focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="admin-input"
               disabled={saving}
             />
-            <p className="text-xs text-gray-500 mt-1">
-              This name will be displayed as the author of your posts
-            </p>
+            <p className="admin-hint">This name will be displayed as the author of your posts</p>
           </div>
 
           <button
             type="submit"
             disabled={saving}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="admin-btn admin-btn-primary mt-6"
           >
             {saving ? 'Saving...' : 'Save Changes'}
           </button>

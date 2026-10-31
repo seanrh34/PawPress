@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Category } from '@/lib/types';
+import { FiFolder, FiPlus } from 'react-icons/fi';
+import PageHeader from '@/components/admin/PageHeader';
 
 export default function CategoriesPage() {
   const router = useRouter();
@@ -53,126 +55,140 @@ export default function CategoriesPage() {
     }
   };
 
+  const renderActions = (category: Category) => (
+    <div className="flex flex-wrap items-center gap-1">
+      <button
+        type="button"
+        onClick={() => router.push(`/category/${category.slug}`)}
+        className="admin-btn admin-btn-ghost"
+      >
+        View
+      </button>
+      <button
+        type="button"
+        onClick={() => router.push(`/admin/category/${category.id}/edit`)}
+        className="admin-btn admin-btn-ghost"
+      >
+        Edit
+      </button>
+      <button
+        type="button"
+        onClick={() => handleDelete(category.id, category.name)}
+        className="admin-btn admin-btn-ghost-danger"
+      >
+        Delete
+      </button>
+    </div>
+  );
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center text-black">
+      <div className="flex items-center justify-center py-24">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading categories...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-signal mx-auto mb-4"></div>
+          <p className="text-copy-muted">Loading categories...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 text-black">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Categories</h1>
-            <p className="mt-2 text-gray-600">
-              Manage your blog categories
-            </p>
-          </div>
-          <div className="flex gap-4">
+    <div>
+      <PageHeader
+        eyebrow="Content"
+        title="Categories"
+        description="Manage your blog categories"
+        actions={
+          <>
             <button
+              type="button"
               onClick={() => router.push('/admin')}
-              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="admin-btn admin-btn-ghost"
             >
               Back to Dashboard
             </button>
             <button
+              type="button"
               onClick={() => router.push('/admin/category/new')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="admin-btn admin-btn-primary"
             >
+              <FiPlus size={16} aria-hidden="true" />
               New Category
             </button>
-          </div>
+          </>
+        }
+      />
+
+      {/* Error State */}
+      {error && (
+        <div className="admin-alert admin-alert-error mb-6">
+          <p>{error}</p>
         </div>
+      )}
 
-        {/* Error State */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-800">{error}</p>
-          </div>
-        )}
-
-        {/* Categories List */}
-        {categories.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-12 text-center">
-            <p className="text-gray-500 mb-4">No categories yet</p>
-            <button
-              onClick={() => router.push('/admin/category/new')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Create First Category
-            </button>
-          </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+      {/* Categories List */}
+      {categories.length === 0 ? (
+        <div className="admin-card flex flex-col items-center gap-3 py-12 text-center">
+          <FiFolder size={24} aria-hidden="true" className="text-copy-muted" />
+          <p className="text-copy-muted">No categories yet</p>
+          <button
+            type="button"
+            onClick={() => router.push('/admin/category/new')}
+            className="admin-btn admin-btn-primary"
+          >
+            <FiPlus size={16} aria-hidden="true" />
+            Create First Category
+          </button>
+        </div>
+      ) : (
+        <section className="admin-card">
+          {/* Table, md and up */}
+          <div className="hidden md:block">
+            <table className="admin-table">
+              <thead>
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Slug
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Description
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Slug</th>
+                  <th scope="col">Description</th>
+                  <th scope="col">Actions</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody>
                 {categories.map((category) => (
-                  <tr key={category.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {category.name}
-                      </div>
+                  <tr key={category.id}>
+                    <td className="font-medium text-copy">{category.name}</td>
+                    <td className="admin-mono-meta whitespace-nowrap">{category.slug}</td>
+                    <td className="max-w-md text-copy-muted line-clamp-2">
+                      {category.description}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500">
-                        {category.slug}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-500 max-w-md truncate">
-                        {category.description}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => router.push(`/category/${category.slug}`)}
-                        className="text-blue-600 hover:text-blue-900 mr-4 cursor-pointer"
-                      >
-                        View
-                      </button>
-                      <button
-                        onClick={() => router.push(`/admin/category/${category.id}/edit`)}
-                        className="text-indigo-600 hover:text-indigo-900 mr-4 cursor-pointer"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(category.id, category.name)}
-                        className="text-red-600 hover:text-red-900 cursor-pointer"
-                      >
-                        Delete
-                      </button>
-                    </td>
+                    <td>{renderActions(category)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+
+          {/* Stacked cards, below md */}
+          <div className="flex flex-col gap-4 md:hidden">
+            {categories.map((category) => (
+              <div key={category.id} className="rounded-[var(--radius-panel)] border border-rail p-4">
+                <p className="font-medium text-copy">{category.name}</p>
+                <dl className="mt-3 space-y-2 text-sm">
+                  <div>
+                    <dt className="portal-label text-copy-muted">Slug</dt>
+                    <dd className="admin-mono-meta mt-0.5">{category.slug}</dd>
+                  </div>
+                  <div>
+                    <dt className="portal-label text-copy-muted">Description</dt>
+                    <dd className="mt-0.5 text-copy-muted">{category.description}</dd>
+                  </div>
+                </dl>
+                <div className="mt-4 border-t border-rail pt-3">{renderActions(category)}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
