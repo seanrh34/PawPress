@@ -191,14 +191,14 @@ export default function UsersPage() {
                 id="new-password"
                 type="password"
                 required
-                minLength={6}
+                minLength={12}
                 value={newPassword}
                 placeholder="$ecretPass123"
                 onChange={(e) => setNewPassword(e.target.value)}
                 className="admin-input"
                 disabled={creating}
               />
-              <p className="admin-hint">Minimum 6 characters</p>
+              <p className="admin-hint">Minimum 12 characters</p>
             </div>
 
             <div>
