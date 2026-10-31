@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { crossOriginResponse } from '@/lib/api/webLock';
 import { getUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase-server';
 
 // PUT update own profile
 export async function PUT(request: NextRequest) {
+  const denied = crossOriginResponse(request);
+  if (denied) return denied;
+
   try {
     const user = await getUser();
     

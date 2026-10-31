@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { crossOriginResponse } from '@/lib/api/webLock';
 import { createClient } from '@/lib/supabase-server';
 
 export async function POST(request: NextRequest) {
+  const denied = crossOriginResponse(request);
+  if (denied) return denied;
+
   try {
     const { email, password } = await request.json();
 

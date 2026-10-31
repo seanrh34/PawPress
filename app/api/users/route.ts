@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { crossOriginResponse } from '@/lib/api/webLock';
 import { requireMaster, getAllUserProfiles } from '@/lib/auth';
 import { createClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
+
+const MIN_PASSWORD_LENGTH = 12;
 
 // GET all user profiles (master only)
 export async function GET() {
@@ -18,6 +21,9 @@ export async function GET() {
 
 // POST create new admin account (master only)
 export async function POST(request: NextRequest) {
+  const denied = crossOriginResponse(request);
+  if (denied) return denied;
+
   try {
     const { user } = await requireMaster();
     const { email, password, display_name } = await request.json();
@@ -30,9 +36,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (password.length < 6) {
+    if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
       return NextResponse.json(
-        { error: 'Password must be at least 6 characters' },
+        { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` },
         { status: 400 }
       );
     }

@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { getAuthenticatedSupabaseClient } from '@/lib/supabase-server';
 import { processAndUploadImages } from '@/lib/uploadImages';
 import { getUser } from '@/lib/auth';
+import { crossOriginResponse } from '@/lib/api/webLock';
 import { ApiError, toLegacyResponse } from '@/lib/cms/errors';
 import { createPost } from '@/lib/cms/postService';
 import { parseStrictIsoTimestamp } from '@/lib/cms/timestamp';
@@ -50,6 +51,9 @@ export async function POST(request: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const denied = crossOriginResponse(request);
+  if (denied) return denied;
 
   try {
     const body = await request.json();
