@@ -1,146 +1,203 @@
-import { createAdminClient } from './supabase-admin';
+import { lookup as dnsLookup, type LookupAddress } from 'node:dns';
+import http from 'node:http';
+import https from 'node:https';
+import { BlockList, isIP, type LookupFunction } from 'node:net';
 import { SerializedEditorState } from 'lexical';
+import { createAdminClient } from './supabase-admin';
+import { MAX_UPLOAD_BYTES, detectImageType, uploadImage } from './cms/mediaService';
 
 // SERVER-ONLY: this module uses the Supabase service-role client, which bypasses
 // RLS. It must only be imported from server-side code (route handlers / server
 // components) after the caller has performed its auth check. NEVER import this
 // module from a 'use client' component.
 
+const FETCH_TIMEOUT_MS = 10_000;
+const MAX_REMOTE_IMAGES = 20;
+
 /**
- * Upload a base64 image to Supabase Storage
- * @param base64Data - The base64 encoded image data
- * @param contentType - The MIME type of the image
- * @returns The public URL from Supabase Storage
+ * Addresses a server-side fetch must never reach: loopback, private, link-local
+ * (cloud metadata), CGNAT, multicast and reserved ranges, for IPv4 and IPv6.
  */
-async function uploadBase64ToSupabase(base64Data: string, contentType: string): Promise<string> {
-  const supabase = createAdminClient();
-  try {
-    // Convert base64 to buffer
-    const base64WithoutPrefix = base64Data.split(',')[1] || base64Data;
-    const buffer = Buffer.from(base64WithoutPrefix, 'base64');
-    
-    // Generate unique filename
-    const timestamp = Date.now();
-    const randomStr = Math.random().toString(36).substring(2, 15);
-    const extension = contentType.split('/')[1] || 'jpg';
-    const fileName = `${timestamp}-${randomStr}.${extension}`;
-    
-    // Upload to Supabase Storage
-    const { data, error } = await supabase.storage
-      .from('post-images')
-      .upload(fileName, buffer, {
-        contentType,
-        cacheControl: '3600',
-        upsert: false
-      });
-    
-    if (error) {
-      throw error;
-    }
-    
-    // Get public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('post-images')
-      .getPublicUrl(data.path);
-    
-    return publicUrl;
-  } catch (error) {
-    console.error('Failed to upload image:', error);
-    throw error;
-  }
+const BLOCKED_ADDRESSES = new BlockList();
+for (const [network, prefix] of [
+  ['0.0.0.0', 8],
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
+  ['192.168.0.0', 16],
+  ['198.18.0.0', 15],
+  ['224.0.0.0', 3],
+] as const) {
+  BLOCKED_ADDRESSES.addSubnet(network, prefix, 'ipv4');
+}
+// IPv4-mapped IPv6 (::ffff:a.b.c.d) is matched against the IPv4 rules above.
+for (const [network, prefix] of [
+  ['::', 128],
+  ['::1', 128],
+  ['64:ff9b::', 96],
+  ['fc00::', 7],
+  ['fe80::', 10],
+  ['ff00::', 8],
+] as const) {
+  BLOCKED_ADDRESSES.addSubnet(network, prefix, 'ipv6');
+}
+
+export function isBlockedAddress(address: string): boolean {
+  const family = isIP(address);
+  if (family === 0) return true;
+  return BLOCKED_ADDRESSES.check(address, family === 6 ? 'ipv6' : 'ipv4');
 }
 
 /**
- * Download an external image URL and upload to Supabase Storage
- * @param imageUrl - The external image URL to download
- * @returns The public URL from Supabase Storage
+ * DNS lookup that refuses internal addresses. It runs at connect time, so the
+ * checked address is the one actually used (no DNS-rebinding gap).
  */
-async function downloadAndUploadToSupabase(imageUrl: string): Promise<string> {
-  const supabase = createAdminClient();
-  try {
-    // Fetch the image from the external URL
-    const response = await fetch(imageUrl);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.statusText}`);
-    }
-    
-    // Get content type from response headers
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
-    
-    // Convert response to buffer
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    
-    // Generate unique filename
-    const timestamp = Date.now();
-    const randomStr = Math.random().toString(36).substring(2, 15);
-    const extension = contentType.split('/')[1] || 'jpg';
-    const fileName = `${timestamp}-${randomStr}.${extension}`;
-    
-    // Upload to Supabase Storage
-    const { data, error } = await supabase.storage
-      .from('post-images')
-      .upload(fileName, buffer, {
-        contentType,
-        cacheControl: '3600',
-        upsert: false
-      });
-    
+const safeLookup: LookupFunction = (hostname, options, callback) => {
+  dnsLookup(hostname, { ...options, all: true }, (error, addresses) => {
     if (error) {
-      throw error;
+      callback(error, '', 0);
+      return;
     }
-    
-    // Get public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('post-images')
-      .getPublicUrl(data.path);
-    
-    return publicUrl;
-  } catch (error) {
-    console.error('Failed to download and upload image:', error);
-    throw error;
+    const list = addresses as LookupAddress[];
+    const blocked = list.find((entry) => isBlockedAddress(entry.address));
+    if (list.length === 0 || blocked) {
+      callback(new Error('Refusing to fetch an internal address'), '', 0);
+      return;
+    }
+    if (options.all) {
+      (callback as unknown as (err: null, all: LookupAddress[]) => void)(null, list);
+    } else {
+      callback(null, list[0].address, list[0].family);
+    }
+  });
+};
+
+/**
+ * Downloads an external http(s) image: no redirects, a timeout, at most
+ * MAX_UPLOAD_BYTES, and only to public addresses.
+ */
+export function fetchExternalImage(imageUrl: string): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    let url: URL;
+    try {
+      url = new URL(imageUrl);
+    } catch {
+      reject(new Error('Invalid image URL'));
+      return;
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      reject(new Error('Unsupported image URL scheme'));
+      return;
+    }
+    // IP literals skip DNS, so check them here.
+    const host = url.hostname.replace(/^\[|\]$/g, '');
+    if (isIP(host) !== 0 && isBlockedAddress(host)) {
+      reject(new Error('Refusing to fetch an internal address'));
+      return;
+    }
+
+    const client = url.protocol === 'https:' ? https : http;
+    const req = client.get(
+      url,
+      { lookup: safeLookup, timeout: FETCH_TIMEOUT_MS, headers: { Accept: 'image/*' } },
+      (res) => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          reject(new Error(`Image fetch failed with HTTP ${res.statusCode}`));
+          return;
+        }
+        const declared = Number(res.headers['content-length']);
+        if (Number.isFinite(declared) && declared > MAX_UPLOAD_BYTES) {
+          res.destroy();
+          reject(new Error('Image exceeds the maximum size'));
+          return;
+        }
+        const chunks: Buffer[] = [];
+        let size = 0;
+        res.on('data', (chunk: Buffer) => {
+          size += chunk.length;
+          if (size > MAX_UPLOAD_BYTES) {
+            res.destroy();
+            reject(new Error('Image exceeds the maximum size'));
+            return;
+          }
+          chunks.push(chunk);
+        });
+        res.on('end', () => resolve(new Uint8Array(Buffer.concat(chunks))));
+        res.on('error', reject);
+      },
+    );
+    req.on('timeout', () => req.destroy(new Error('Image fetch timed out')));
+    req.on('error', reject);
+  });
+}
+
+/**
+ * Uploads image bytes through the media service, which enforces the size
+ * limit and stores only real PNG/JPEG/GIF/WebP/AVIF files (by magic bytes).
+ */
+async function storeImage(bytes: Uint8Array): Promise<string> {
+  const detected = detectImageType(bytes) ?? '';
+  const { url } = await uploadImage(createAdminClient(), bytes, detected);
+  return url;
+}
+
+function decodeDataUrl(dataUrl: string): Uint8Array {
+  const comma = dataUrl.indexOf(',');
+  const payload = comma === -1 ? '' : dataUrl.slice(comma + 1);
+  // base64 is 4/3 the size of the bytes; reject before decoding.
+  if (payload.length > Math.ceil((MAX_UPLOAD_BYTES * 4) / 3) + 4) {
+    throw new Error('Image exceeds the maximum size');
   }
+  return new Uint8Array(Buffer.from(payload, 'base64'));
 }
 
 /**
  * Recursively find all image nodes in the Lexical editor state
  */
-function findImageNodes(node: any): string[] {
+interface NodeLike {
+  type?: unknown;
+  src?: unknown;
+  children?: unknown;
+}
+
+function findImageNodes(node: NodeLike): string[] {
   const imageUrls: string[] = [];
-  
-  if (node.type === 'image' && node.src) {
+
+  if (node.type === 'image' && typeof node.src === 'string' && node.src) {
     imageUrls.push(node.src);
   }
-  
+
   if (node.children && Array.isArray(node.children)) {
     for (const child of node.children) {
       imageUrls.push(...findImageNodes(child));
     }
   }
-  
-  console.log('Found image URLs:', imageUrls);
+
   return imageUrls;
 }
 
 /**
  * Replace blob URLs with permanent URLs in the editor state
  */
-function replaceImageUrls(node: any, urlMap: Map<string, string>): any {
-  if (node.type === 'image' && node.src && urlMap.has(node.src)) {
+function replaceImageUrls(node: NodeLike, urlMap: Map<string, string>): NodeLike {
+  if (node.type === 'image' && typeof node.src === 'string' && urlMap.has(node.src)) {
     return {
       ...node,
       src: urlMap.get(node.src)
     };
   }
-  
+
   if (node.children && Array.isArray(node.children)) {
     return {
       ...node,
-      children: node.children.map((child: any) => replaceImageUrls(child, urlMap))
+      children: node.children.map((child: NodeLike) => replaceImageUrls(child, urlMap))
     };
   }
-  
+
   return node;
 }
 
@@ -152,62 +209,45 @@ function replaceImageUrls(node: any, urlMap: Map<string, string>): any {
  */
 export async function processAndUploadImages(editorState: SerializedEditorState): Promise<SerializedEditorState> {
   try {
-    // Find all image URLs in the editor state
-    const imageUrls = findImageNodes(editorState.root);
-    console.log('Image URLs to process:', imageUrls);
-    
+    const imageUrls = [...new Set(findImageNodes(editorState.root as NodeLike))];
     if (imageUrls.length === 0) {
-      console.log('No images found, skipping upload.');
       return editorState;
     }
-    
+
     // Get Supabase storage URL to detect already-uploaded images
-    const supabaseStorageUrl = process.env.NEXT_PUBLIC_SUPABASE_URL 
+    const supabaseStorageUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
       ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/post-images/`
       : '';
-    
-    // Upload all images and create URL mapping
+
     const urlMap = new Map<string, string>();
-    
+    let remoteFetches = 0;
+
     for (const imageUrl of imageUrls) {
       try {
-        let permanentUrl: string;
-        
         if (imageUrl.startsWith('data:image/')) {
-          // Base64 image - extract content type and upload
-          console.log('Uploading base64 image:', imageUrl.substring(0, 30) + '...');
-          const contentTypeMatch = imageUrl.match(/data:(image\/[a-z]+);/);
-          const contentType = contentTypeMatch ? contentTypeMatch[1] : 'image/jpeg';
-          permanentUrl = await uploadBase64ToSupabase(imageUrl, contentType);
+          urlMap.set(imageUrl, await storeImage(decodeDataUrl(imageUrl)));
         } else if (supabaseStorageUrl && imageUrl.startsWith(supabaseStorageUrl)) {
           // Already uploaded to our Supabase Storage - skip
-          console.log('Skipping already uploaded Supabase image:', imageUrl);
           continue;
-        } else if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-          // External URL - download and re-upload
-          console.log('Downloading and uploading external image:', imageUrl);
-          permanentUrl = await downloadAndUploadToSupabase(imageUrl);
-        } else {
-          // Unknown URL format - skip
-          console.log('Skipping unknown URL format:', imageUrl);
-          continue;
+        } else if (/^https?:\/\//i.test(imageUrl)) {
+          if (remoteFetches >= MAX_REMOTE_IMAGES) continue;
+          remoteFetches += 1;
+          urlMap.set(imageUrl, await storeImage(await fetchExternalImage(imageUrl)));
         }
-        
-        urlMap.set(imageUrl, permanentUrl);
-        console.log('Successfully uploaded:', permanentUrl);
       } catch (error) {
-        console.error('Failed to upload image:', error);
-        // Keep the original URL if upload fails
+        // Keep the original URL if upload fails. Log only the reason: the URL
+        // may be a large data: URI.
+        console.error(
+          'Failed to upload image:',
+          error instanceof Error ? error.message : error,
+        );
       }
     }
-    
-    // Replace original URLs with permanent Supabase URLs in the editor state
-    const updatedEditorState = {
+
+    return {
       ...editorState,
-      root: replaceImageUrls(editorState.root, urlMap)
+      root: replaceImageUrls(editorState.root as NodeLike, urlMap) as SerializedEditorState['root'],
     };
-    
-    return updatedEditorState;
   } catch (error) {
     console.error('Error processing images:', error);
     // Return original state if processing fails
