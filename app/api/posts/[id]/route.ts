@@ -10,6 +10,7 @@ import { deletePost, updatePost, type UpdatePostPatch } from '@/lib/cms/postServ
 import { parseStrictIsoTimestamp } from '@/lib/cms/timestamp';
 import {
   WebResponseError,
+  crossOriginResponse,
   requireAdminProfile,
 } from '@/lib/api/webLock';
 
@@ -79,6 +80,9 @@ export async function PUT(
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const denied = crossOriginResponse(request);
+  if (denied) return denied;
 
   try {
     const { id } = await params;
@@ -219,6 +223,9 @@ export async function DELETE(
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const denied = crossOriginResponse(request);
+  if (denied) return denied;
 
   try {
     const { id } = await params;

@@ -72,18 +72,29 @@ export async function requireWebLockSession(
     throw unauthorized();
   }
 
-  try {
-    assertSameOrigin(req);
-  } catch (error) {
-    if (error instanceof ApiError) {
-      throw new WebResponseError(
-        NextResponse.json({ error: error.message }, { status: error.status }),
-      );
-    }
-    throw error;
+  const denied = crossOriginResponse(req);
+  if (denied) {
+    throw new WebResponseError(denied);
   }
 
   return requireAdminProfile(user);
+}
+
+/**
+ * Same-origin check for legacy cookie-session mutations. Returns the legacy
+ * `{ error }` 403 response when the `Origin` header does not match the host,
+ * or null when the request may proceed.
+ */
+export function crossOriginResponse(req: Request): NextResponse | null {
+  try {
+    assertSameOrigin(req);
+    return null;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    throw error;
+  }
 }
 
 /** Maps thrown errors from a web lock route to a Response. */
