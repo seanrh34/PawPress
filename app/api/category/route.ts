@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getUser } from '@/lib/auth';
+import { requireWebLockSession, webErrorResponse } from '@/lib/api/webLock';
 import { ApiError, toLegacyResponse } from '@/lib/cms/errors';
 import { createCategory, listCategories } from '@/lib/cms/categoryService';
 
@@ -28,10 +28,12 @@ export async function GET() {
 
 // POST - Create new category
 export async function POST(request: Request) {
-  // Check authentication
-  const user = await getUser();
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Verified user, same origin and a master/admin profile: this route writes
+  // with the service-role client, so RLS does not back it up.
+  try {
+    await requireWebLockSession(request);
+  } catch (error) {
+    return webErrorResponse('authorize request', error);
   }
 
   try {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { crossOriginResponse } from '@/lib/api/webLock';
 import { requireMaster } from '@/lib/auth';
 import { createClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
@@ -8,6 +9,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const denied = crossOriginResponse(request);
+  if (denied) return denied;
+
   try {
     await requireMaster();
     const { id } = await params;

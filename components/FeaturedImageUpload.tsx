@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { XCircle } from 'react-bootstrap-icons';
+import { FiUpload, FiXCircle } from 'react-icons/fi';
 import Toggle from './Toggle';
 
 interface FeaturedImageUploadProps {
@@ -51,15 +51,19 @@ export default function FeaturedImageUpload({ value, onChange }: FeaturedImageUp
         <label className="form-label mb-0">Featured Image *</label>
       </div>
       <Toggle
-        leftChoice="Image URL" 
+        leftChoice="Image URL"
         rightChoice="Upload File"
         checked={useUpload}
         onChange={setUseUpload}
       />
       {!useUpload ? (
         <div>
+          <label htmlFor="featured-image-url" className="sr-only">
+            Image URL
+          </label>
           <input
             type="text"
+            id="featured-image-url"
             className="form-input"
             value={url}
             onChange={(e) => {
@@ -71,18 +75,19 @@ export default function FeaturedImageUpload({ value, onChange }: FeaturedImageUp
             }}
             placeholder="https://example.com/image.jpg"
           />
-          <p className="text-xs text-gray-500 mt-1">Enter a direct image URL</p>
+          <p className="admin-hint">Enter a direct image URL</p>
           {url && !URL_PATTERN.test(url) && (
-            <p className="text-sm text-red-600">Please enter a valid URL</p>
+            <p className="admin-error mt-1">Please enter a valid URL</p>
           )}
         </div>
       ) : (
         <div>
           <button
             type="button"
-            className="btn-secondary w-full"
+            className="admin-btn admin-btn-secondary w-full"
             onClick={() => inputRef?.current?.click()}
           >
+            <FiUpload size={16} aria-hidden="true" />
             {file ? file.name : "Choose File"}
           </button>
           <input
@@ -91,29 +96,31 @@ export default function FeaturedImageUpload({ value, onChange }: FeaturedImageUp
             accept="image/*"
             style={{ display: "none" }}
             onChange={handleFileChange}
+            aria-label="Upload featured image file"
           />
-          <p className="text-xs text-gray-500 mt-1">Maximum file size: 10MB</p>
+          <p className="admin-hint">Maximum file size: 10MB</p>
         </div>
       )}
 
       {error && (
-        <p className="text-sm text-red-600">{error}</p>
+        <p className="admin-error">{error}</p>
       )}
 
       {((url && URL_PATTERN.test(url)) || file) && !error && (
         <div className="relative inline-block">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={file ? URL.createObjectURL(file) : url}
             alt="Featured image preview"
-            className="max-w-xs max-h-48 border border-gray-300 object-cover"
+            className="max-h-48 max-w-xs rounded-[var(--radius-control)] border border-rail object-cover"
           />
           <button
             type="button"
             onClick={handleRemove}
-            className="absolute -top-2 -right-2 bg-white rounded-full shadow-md hover:shadow-lg transition-shadow"
+            className="absolute -top-2 -right-2 rounded-full border border-rail bg-surface p-1 shadow-sm"
             aria-label="Remove image"
           >
-            <XCircle size={24} className="text-red-500" />
+            <FiXCircle size={18} className="text-cancelled" />
           </button>
         </div>
       )}

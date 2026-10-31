@@ -8,6 +8,14 @@ import { restEq } from '@/lib/supabaseRest';
 // Reserved slugs that should not match post routes
 const RESERVED_SLUGS = ['admin', 'api', 'category', 'posts', 'styles'];
 
+// Fixed locale + timeZone so server and client render the same string.
+const dateFormatter = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  timeZone: 'UTC',
+});
+
 async function getPost(slug: string): Promise<Post | null> {
   try {
     const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/posts?${restEq('slug', slug)}`, {
@@ -93,60 +101,61 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
     notFound();
   }
 
-  const publishedDate = post.published_at 
-    ? new Date(post.published_at).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      })
+  const publishedDate = post.published_at
+    ? dateFormatter.format(new Date(post.published_at))
     : 'Draft';
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Post Content */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <article>
+    <div className="min-h-screen bg-platform">
+      <main className="mx-auto max-w-4xl px-5 py-12 md:px-8 md:py-16">
+        <Link
+          href="/#posts"
+          className="portal-label inline-flex min-h-11 items-center text-copy-muted hover:text-signal"
+        >
+          ← All posts
+        </Link>
+
+        <article className="mt-6">
           {/* Post Header */}
           <header className="mb-8">
-            {/* Category Badge */}
             {post.category && (
               <div className="mb-4">
-                <Link 
+                <Link
                   href={`/category/${post.category.slug}`}
-                  className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors"
+                  className="portal-label inline-flex min-h-11 items-center rounded-full border border-copy px-2.5 text-copy hover:text-signal"
                 >
                   {post.category.name}
                 </Link>
               </div>
             )}
 
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">
-              {post.title}
-            </h1>
-            
+            <h1 className="portal-heading break-words text-4xl leading-tight md:text-5xl">{post.title}</h1>
+
             {/* Featured Image */}
             {post.featured_image_url && (
-              <div className="mb-8">
-                <img 
-                  src={post.featured_image_url} 
+              <div className="mt-8">
+                <img
+                  src={post.featured_image_url}
                   alt={post.title}
-                  className="w-full rounded-lg"
+                  className="w-full rounded-panel border border-rail"
                 />
               </div>
             )}
 
-            <div className="flex items-center gap-4 text-sm text-gray-500">
-              <time dateTime={post.published_at || post.created_at}>
+            <div className="mt-4 flex items-center gap-4">
+              <time dateTime={post.published_at || post.created_at} className="portal-label text-copy-muted">
                 {publishedDate}
               </time>
             </div>
           </header>
 
           {/* Post Content - Rendered HTML */}
-          <div 
-            className="post-content"
-            dangerouslySetInnerHTML={{ __html: post.content_html }}
-          />
+          <div className="rounded-panel border border-rail bg-platform-raised p-5 sm:p-10">
+            <div
+              className="post-content"
+              dangerouslySetInnerHTML={{ __html: post.content_html }}
+            />
+          </div>
         </article>
       </main>
     </div>

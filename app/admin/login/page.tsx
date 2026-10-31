@@ -2,6 +2,9 @@
 
 import { useState, FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+import Link from 'next/link';
+import { FiArrowLeft } from 'react-icons/fi';
 import { supabase } from '@/lib/supabase';
 
 export default function LoginPage() {
@@ -22,7 +25,7 @@ export default function LoginPage() {
     try {
       const response = await fetch('/api/auth/session');
       const data = await response.json();
-      
+
       if (data.authenticated) {
         setIsAuthenticated(true);
         setUserEmail(data.user.email || '');
@@ -81,41 +84,45 @@ export default function LoginPage() {
 
   if (checkingAuth) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-gray-600">Loading...</div>
+      <div className="flex min-h-screen items-center justify-center bg-platform text-copy">
+        <div className="text-copy-muted">Loading...</div>
       </div>
     );
   }
 
   if (isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow-md">
-          <div>
-            <h2 className="text-center text-3xl font-bold text-gray-900">
-              PawPress Admin
-            </h2>
-            <p className="mt-2 text-center text-sm text-gray-600">
-              You are already logged in
-            </p>
-          </div>
+      <div className="relative flex min-h-screen items-center justify-center bg-platform px-4 py-12 text-copy">
+        <div className="hero-dots pointer-events-none absolute inset-0" aria-hidden="true" />
+        <div className="admin-card relative w-full max-w-sm text-center">
+          <Image
+            src="/34cats_main_light.png"
+            alt="34cats"
+            width={240}
+            height={120}
+            className="mx-auto h-10 w-auto"
+          />
+          <h2 className="portal-heading mt-4 text-2xl tracking-tight">PawPress Admin</h2>
+          <p className="mt-2 text-sm text-copy-muted">You are already logged in</p>
 
-          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
+          <div className="admin-alert admin-alert-success mt-4 text-left">
             Logged in as: <strong>{userEmail}</strong>
           </div>
 
-          <div className="space-y-3">
+          <div className="mt-6 space-y-2">
             <button
+              type="button"
               onClick={() => router.push('/admin')}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              className="admin-btn admin-btn-primary w-full"
             >
               Go to Dashboard
             </button>
-            
+
             <button
+              type="button"
               onClick={handleLogout}
               disabled={loading}
-              className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="admin-btn admin-btn-secondary w-full"
             >
               {loading ? 'Logging out...' : 'Log out'}
             </button>
@@ -126,72 +133,76 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow-md">
-        <div>
-          <h2 className="text-center text-3xl font-bold text-gray-900">
-            PawPress Admin
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Sign in to access the dashboard
-          </p>
+    <div className="relative flex min-h-screen items-center justify-center bg-platform px-4 py-12 text-copy">
+      <div className="hero-dots pointer-events-none absolute inset-0" aria-hidden="true" />
+      <div className="admin-card relative w-full max-w-sm">
+        <div className="flex flex-col items-center text-center">
+          <Image
+            src="/34cats_main_light.png"
+            alt="34cats"
+            width={240}
+            height={120}
+            className="h-10 w-auto"
+          />
+          <h1 className="portal-heading mt-4 text-2xl tracking-tight">Sign in to PawPress</h1>
         </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+        <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            <div className="admin-alert admin-alert-error" role="alert">
               {error}
             </div>
           )}
 
-          <div className="space-y-4 text-black">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                placeholder='john@example.com'
-                onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                disabled={loading}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                placeholder='$ecretPass123'
-                onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                disabled={loading}
-              />
-            </div>
+          <div>
+            <label htmlFor="email" className="admin-label">
+              Email address
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              placeholder="john@example.com"
+              onChange={(e) => setEmail(e.target.value)}
+              className="admin-input"
+              disabled={loading}
+            />
           </div>
 
           <div>
-            <button
-              type="submit"
+            <label htmlFor="password" className="admin-label">
+              Password
+            </label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              placeholder="$ecretPass123"
+              onChange={(e) => setPassword(e.target.value)}
+              className="admin-input"
               disabled={loading}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Signing in...' : 'Sign in'}
-            </button>
+            />
           </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="admin-btn admin-btn-primary w-full"
+          >
+            {loading ? 'Signing in...' : 'Sign in'}
+          </button>
         </form>
+
+        <Link href="/" className="admin-btn admin-btn-ghost mt-2 w-full">
+          <FiArrowLeft size={16} aria-hidden="true" />
+          Back to the blog
+        </Link>
       </div>
     </div>
   );

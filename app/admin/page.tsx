@@ -4,13 +4,24 @@ import Link from 'next/link';
 import { Post } from '@/lib/types';
 import { postStatus } from '@/lib/cms/status';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { FiFileText, FiPlus, FiSearch } from 'react-icons/fi';
+import PageHeader from '@/components/admin/PageHeader';
+
+type StatusFilter = 'all' | 'published' | 'scheduled' | 'draft';
+
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'published', label: 'Published' },
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'draft', label: 'Drafts' },
+];
 
 export default function AdminDashboard() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [locks, setLocks] = useState<Record<string, { kind: 'user' | 'agent'; label: string }>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     fetchPosts();
@@ -37,7 +48,7 @@ export default function AdminDashboard() {
         throw new Error('Failed to fetch posts');
       }
       const data = await response.json();
-      
+
       // Fetch categories for each post
       const postsWithCategories = await Promise.all(
         data.map(async (post: Post) => {
@@ -55,7 +66,7 @@ export default function AdminDashboard() {
           return post;
         })
       );
-      
+
       setPosts(postsWithCategories);
       void fetchLocks();
     } catch (error) {
@@ -93,218 +104,270 @@ export default function AdminDashboard() {
   const scheduledCount = posts.filter(p => postStatus(p.published_at, now) === 'scheduled').length;
   const draftCount = posts.filter(p => postStatus(p.published_at, now) === 'draft').length;
 
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredPosts = posts.filter((post) => {
+    const status = postStatus(post.published_at, now);
+    if (statusFilter !== 'all' && status !== statusFilter) {
+      return false;
+    }
+    if (
+      normalizedQuery &&
+      !post.title.toLowerCase().includes(normalizedQuery) &&
+      !post.slug.toLowerCase().includes(normalizedQuery)
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  const counts: Record<StatusFilter, number> = {
+    all: posts.length,
+    published: publishedCount,
+    scheduled: scheduledCount,
+    draft: draftCount,
+  };
+
+  const stats: { label: string; value: number }[] = [
+    { label: 'Total', value: posts.length },
+    { label: 'Published', value: publishedCount },
+    { label: 'Scheduled', value: scheduledCount },
+    { label: 'Drafts', value: draftCount },
+  ];
+
+  const renderActions = (post: Post, status: string) => (
+    <div className="flex flex-wrap items-center gap-1">
+      {status === 'published' ? (
+        <Link href={`/${post.slug}`} className="admin-btn admin-btn-ghost">
+          View
+        </Link>
+      ) : (
+        <span className="admin-btn admin-btn-ghost cursor-not-allowed opacity-50" aria-disabled="true">
+          View
+        </span>
+      )}
+      <Link href={`/admin/posts/${post.id}/edit`} className="admin-btn admin-btn-ghost">
+        Edit
+      </Link>
+      <button
+        type="button"
+        onClick={() => handleDelete(post.id, post.title)}
+        className="admin-btn admin-btn-ghost-danger"
+      >
+        Delete
+      </button>
+    </div>
+  );
+
+  const renderLockNote = (postId: string) => {
+    const lock = locks[postId];
+    if (!lock) return null;
+    return (
+      <div
+        className={`mt-1 font-mono text-xs ${
+          lock.kind === 'agent' ? 'admin-text-agent' : 'text-warning'
+        }`}
+      >
+        {lock.kind === 'agent' ? `Agent editing: ${lock.label}` : `Being edited by ${lock.label}`}
+      </div>
+    );
+  };
+
+  const renderStatusCell = (post: Post) => {
+    const status = postStatus(post.published_at, now);
+    return (
+      <>
+        <span
+          className={`status-badge ${
+            status === 'published'
+              ? 'status-badge-published'
+              : status === 'scheduled'
+                ? 'status-badge-scheduled'
+                : 'status-badge-draft'
+          }`}
+        >
+          {status === 'published' ? 'Published' : status === 'scheduled' ? 'Scheduled' : 'Draft'}
+        </span>
+        {status === 'scheduled' && post.published_at && (
+          <div className="mt-1 text-xs text-warning">
+            Goes live {new Date(post.published_at).toLocaleString()}
+          </div>
+        )}
+      </>
+    );
+  };
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-          <p className="text-gray-600">Manage your blog posts and content</p>
-        </div>
-
-        {/* Action Cards */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-12">
-          <Link href="/admin/posts/new">
-            <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer border-2 border-transparent hover:border-blue-500">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-blue-100 rounded-lg">
-                  <svg
-                    className="w-6 h-6 text-blue-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 4v16m8-8H4"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">New Post</h3>
-                  <p className="text-sm text-gray-600">Create a new blog post</p>
-                </div>
-              </div>
-            </div>
+    <div>
+      <PageHeader
+        eyebrow="Content"
+        title="Dashboard"
+        description="Manage your blog posts and content"
+        actions={
+          <Link href="/admin/posts/new" className="admin-btn admin-btn-primary">
+            <FiPlus size={16} aria-hidden="true" />
+            New post
           </Link>
+        }
+      />
 
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-green-100 rounded-lg">
-                <svg
-                  className="w-6 h-6 text-green-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">{posts.length} Total Posts</h3>
-                <p className="text-sm text-gray-600">{publishedCount} published, {scheduledCount} scheduled, {draftCount} drafts</p>
-              </div>
-            </div>
+      {/* Stats */}
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {stats.map((stat) => (
+          <div key={stat.label} className="admin-card p-4 md:p-5">
+            <p className="portal-heading text-3xl">{stat.value}</p>
+            <p className="portal-label mt-2 text-copy-muted">{stat.label}</p>
           </div>
+        ))}
+      </div>
 
-          <div className="bg-white p-6 rounded-lg shadow-md opacity-50">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <svg
-                  className="w-6 h-6 text-purple-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+      {/* Posts card */}
+      <section className="admin-card">
+        <div className="admin-card-header flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <h2 className="text-lg font-semibold">All posts</h2>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="admin-segment" role="group" aria-label="Filter posts by status">
+              {STATUS_FILTERS.map((filter) => (
+                <button
+                  key={filter.value}
+                  type="button"
+                  aria-pressed={statusFilter === filter.value}
+                  onClick={() => setStatusFilter(filter.value)}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Settings</h3>
-                <p className="text-sm text-gray-600">Coming soon</p>
-              </div>
+                  {filter.label} ({counts[filter.value]})
+                </button>
+              ))}
+            </div>
+            <div className="relative w-full sm:w-64">
+              <FiSearch
+                size={16}
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-copy-muted"
+              />
+              <label htmlFor="post-search" className="sr-only">
+                Search posts
+              </label>
+              <input
+                id="post-search"
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search title or slug"
+                className="admin-input pl-9"
+              />
             </div>
           </div>
         </div>
 
-        {/* Recent Posts Section */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">All Posts</h2>
-            <Link
-              href="/admin/posts/new"
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
-            >
-              Create Post
+        {isLoading ? (
+          <div className="py-12 text-center text-copy-muted">
+            <p>Loading posts...</p>
+          </div>
+        ) : posts.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-12 text-center">
+            <FiFileText size={24} aria-hidden="true" className="text-copy-muted" />
+            <p className="text-copy-muted">No posts yet. Create your first post to get started!</p>
+            <Link href="/admin/posts/new" className="admin-btn admin-btn-primary">
+              <FiPlus size={16} aria-hidden="true" />
+              New post
             </Link>
           </div>
-          
-          {isLoading ? (
-            <div className="text-center py-12 text-gray-500">
-              <p>Loading posts...</p>
-            </div>
-          ) : posts.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
+        ) : filteredPosts.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-12 text-center">
+            <FiSearch size={24} aria-hidden="true" className="text-copy-muted" />
+            <p className="text-copy-muted">No posts match the current filter and search.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setStatusFilter('all');
+                setQuery('');
+              }}
+              className="admin-btn admin-btn-ghost"
+            >
+              Clear filters
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Table, md and up */}
+            <div className="hidden md:block">
+              <table className="admin-table">
+                <thead>
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    <th scope="col">Post</th>
+                    <th scope="col">Category</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Date</th>
+                    <th scope="col">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {posts.map((post) => {
+                <tbody>
+                  {filteredPosts.map((post) => {
                     const status = postStatus(post.published_at, now);
                     return (
-                    <tr key={post.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-4">
-                        <div>
-                          <div className="font-medium text-gray-900">{post.title}</div>
-                          <div className="text-sm text-gray-500">/{post.slug}</div>
-                          {locks[post.id] && (
-                            <div
-                              className={`text-xs mt-1 ${
-                                locks[post.id].kind === 'agent'
-                                  ? 'text-purple-700'
-                                  : 'text-amber-700'
-                              }`}
-                            >
-                              {locks[post.id].kind === 'agent'
-                                ? `🤖 being edited by ${locks[post.id].label}`
-                                : `✏️ being edited by ${locks[post.id].label}`}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        {post.category ? (
-                          <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
-                            {post.category.name}
-                          </span>
-                        ) : (
-                          <span className="text-sm text-gray-400">No category</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-4">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          status === 'published'
-                            ? 'bg-green-100 text-green-800'
-                            : status === 'scheduled'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {status === 'published' ? 'Published' : status === 'scheduled' ? 'Scheduled' : 'Draft'}
-                        </span>
-                        {status === 'scheduled' && post.published_at && (
-                          <div className="text-xs text-amber-700 mt-1">
-                            Goes live {new Date(post.published_at).toLocaleString()}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-gray-600">
-                        {new Date(post.published_at || post.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex gap-2 items-center">
-                          {status === 'published' ? (
-                            <Link
-                              href={`/${post.slug}`}
-                              className="text-blue-600 hover:text-blue-800 text-sm"
-                            >
-                              View
-                            </Link>
+                      <tr key={post.id}>
+                        <td>
+                          <div className="font-medium text-copy">{post.title}</div>
+                          <div className="admin-mono-meta">/{post.slug}</div>
+                          {renderLockNote(post.id)}
+                        </td>
+                        <td>
+                          {post.category ? (
+                            <span className="text-copy">{post.category.name}</span>
                           ) : (
-                            <span className="text-gray-400 text-sm cursor-not-allowed">
-                              View
-                            </span>
+                            <span className="text-copy-muted">No category</span>
                           )}
-                          <span className="text-gray-300">|</span>
-                          <Link
-                            href={`/admin/posts/${post.id}/edit`}
-                            className="text-blue-600 hover:text-blue-800 text-sm"
-                          >
-                            Edit
-                          </Link>
-                          <span className="text-gray-300">|</span>
-                          <button
-                            onClick={() => handleDelete(post.id, post.title)}
-                            className="text-red-600 hover:text-red-800 text-sm"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                        <td>{renderStatusCell(post)}</td>
+                        <td className="admin-mono-meta whitespace-nowrap">
+                          {new Date(post.published_at || post.created_at).toLocaleDateString()}
+                        </td>
+                        <td>{renderActions(post, status)}</td>
+                      </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
-          ) : (
-            <div className="text-center py-12 text-gray-500">
-              <p>No posts yet. Create your first post to get started!</p>
+
+            {/* Stacked cards, below md */}
+            <div className="flex flex-col gap-4 md:hidden">
+              {filteredPosts.map((post) => {
+                const status = postStatus(post.published_at, now);
+                return (
+                  <div key={post.id} className="rounded-[var(--radius-panel)] border border-rail p-4">
+                    <p className="font-medium text-copy">{post.title}</p>
+                    <p className="admin-mono-meta mt-0.5">/{post.slug}</p>
+                    {renderLockNote(post.id)}
+                    <dl className="mt-3 space-y-2 text-sm">
+                      <div>
+                        <dt className="portal-label text-copy-muted">Category</dt>
+                        <dd className="mt-0.5">
+                          {post.category ? (
+                            post.category.name
+                          ) : (
+                            <span className="text-copy-muted">No category</span>
+                          )}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="portal-label text-copy-muted">Status</dt>
+                        <dd className="mt-1">{renderStatusCell(post)}</dd>
+                      </div>
+                      <div>
+                        <dt className="portal-label text-copy-muted">Date</dt>
+                        <dd className="admin-mono-meta mt-0.5">
+                          {new Date(post.published_at || post.created_at).toLocaleDateString()}
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="mt-4 border-t border-rail pt-3">{renderActions(post, status)}</div>
+                  </div>
+                );
+              })}
             </div>
-          )}
-        </div>
+          </>
+        )}
+      </section>
     </div>
   );
 }

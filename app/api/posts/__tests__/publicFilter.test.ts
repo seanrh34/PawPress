@@ -166,7 +166,11 @@ describe('legacy web routes published_at validation', () => {
   function jsonRequest(url: string, method: string, body: unknown): NextRequest {
     return new NextRequest(url, {
       method,
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        origin: 'http://test.local',
+        host: 'test.local',
+      },
       body: JSON.stringify(body),
     });
   }

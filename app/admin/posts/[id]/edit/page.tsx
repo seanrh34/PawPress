@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import PostEditor from '@/components/PostEditor';
 import { Post } from '@/lib/types';
 
@@ -36,10 +37,10 @@ export default function EditPost() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="flex items-center justify-center py-24">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading post...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-signal mx-auto mb-4"></div>
+          <p className="text-copy-muted">Loading post...</p>
         </div>
       </div>
     );
@@ -47,9 +48,9 @@ export default function EditPost() {
 
   if (error || !post) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="flex items-center justify-center py-24">
         <div className="text-center">
-          <div className="text-red-600 mb-4">
+          <div className="text-cancelled mb-4">
             <svg
               className="w-12 h-12 mx-auto"
               fill="none"
@@ -64,14 +65,14 @@ export default function EditPost() {
               />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Post</h2>
-          <p className="text-gray-600 mb-4">{error || 'Post not found'}</p>
-          <a
+          <h2 className="text-xl font-semibold mb-2">Error Loading Post</h2>
+          <p className="text-copy-muted mb-4">{error || 'Post not found'}</p>
+          <Link
             href="/admin"
-            className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="admin-btn admin-btn-primary"
           >
             Back to Dashboard
-          </a>
+          </Link>
         </div>
       </div>
     );
